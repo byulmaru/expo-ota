@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-07",
   "workers_dev": false,
+  "vars": {
+    "EXPO_OTA_PUBLIC_KEY_PEM": ""
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

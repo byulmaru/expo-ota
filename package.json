@@ -9,7 +9,7 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "types": "wrangler types"
+    "types": "wrangler types --strict-vars=false"
   },
   "packageManager": "pnpm@11.22.0",
   "type": "module",
