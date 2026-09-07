@@ -9,7 +9,7 @@ The Worker does not publish releases, sign manifests, mutate pointers, or hold a
 - `GET /v1/projects/kosmo-native/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/manifest`
 - `GET /v1/projects/kosmo-native/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/assets/{lowercase-sha256-hex}`
 
-Manifest requests require `expo-protocol-version: 1`, matching `expo-platform` and `expo-runtime-version` headers, and an `Accept` value compatible with the stored manifest content type. If `expo-expect-signature` is present, it must be an Expo Structured Field Value dictionary with a bare `sig` member and optional matching `keyid` and `alg` members.
+Manifest requests require `expo-protocol-version: 1`, matching `expo-platform` and `expo-runtime-version` headers, and, if present, an `Accept` value compatible with the stored manifest content type. If `expo-expect-signature` is present, it must be an Expo Structured Field Value dictionary with a bare `sig` member and optional matching `keyid` and `alg` members.
 
 The stored pointer has this minimal shape:
 
@@ -23,6 +23,8 @@ The stored pointer has this minimal shape:
 ```
 
 The signed manifest must contain a valid Expo Updates v1 manifest. Each `launchAsset` and `assets` entry must use a base64url SHA-256 hash whose decoded bytes match the lowercase hexadecimal asset URL on the same project, platform, channel, runtime, and Worker origin. Asset responses require R2 HTTP `contentType` metadata and a matching R2 SHA-256 checksum before they are streamed with long-lived immutable caching. Assets remain addressable after a channel pointer is promoted because their URLs are content-addressed.
+
+Routing uses Hono. Hono's official `@hono/zod-validator` validates route parameters and request headers, while Zod validates the untrusted pointer and manifest JSON. Expo's SFV dictionary is parsed with `structured-headers` and the exact `sig`, `keyid`, and `alg` contract is enforced afterward; strict canonical base64/base64url decoding uses `@scure/base`.
 
 `wrangler.jsonc` deliberately contains only local/test resource names and an empty public-key placeholder. Replace that variable and bind approved Cloudflare resources in a deployment environment; do not commit private keys, certificates, account identifiers, or release credentials.
 
