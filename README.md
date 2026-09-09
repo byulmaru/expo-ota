@@ -2,7 +2,9 @@
 
 This private repository contains the reusable GitHub Action that validates, signs, and publishes an approved Expo export as a static `multipart/mixed` manifest and immutable assets in one R2 bucket. The Action does not build the app, serve HTTP requests, or select a native runtime.
 
-The legacy Expo OTA Worker deployment is retained unchanged because the CDN permissions required for the new static host are currently blocked. This repository does not claim that the new static path is already live or that a device has applied one of its releases.
+The legacy Expo OTA Worker deployment remains available for rollback, but its custom domain is detached and no `/v1/...` path is active. This README records the static endpoint's configured routing/header state, not full static-host validation or device-application proof.
+
+As of 2026-09-09, the R2 custom domain `expo-ota.byulmaru.co` is configured/enabled and DNS is R2-proxied. UI configuration shows manifest cache bypass active. An independent edge check verified TLS, static routing, and manifest-only `expo-protocol-version: 1` / `expo-sfv-version: 0` headers; the empty R2 bucket (0 B) correctly returned an HTML 404 with `cf-cache-status: DYNAMIC`, which does not prove positive manifest cache behavior. No real release has returned HTTP 200 or produced signature, asset, or device-application proof.
 
 The Action must receive an already-built, approved export from the calling repository. The calling workflow owns the approved commit, environment approval, and concurrency guard for the `(project, platform, channel, runtimeVersion)` tuple. Keep the Action reference pinned to an immutable commit until a reviewed release of this private repository exists; the examples below intentionally use `<ACTION_COMMIT_SHA>` because no `v1` reference exists yet.
 
@@ -50,8 +52,6 @@ Publisher CI owns the release proof: it validates the export, hashes every asset
 The channel is part of the asset URL in this contract. Promoting a manifest between `staging` and `production` therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
 
 Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. It does not delete old assets. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
-
-The legacy `/v1/...` Worker deployment remains unchanged until the blocked CDN permissions are available. The new `/releases/...` static host, live R2 behavior, CDN cache behavior, and device application still require deployment and production evidence; local checks below do not provide that proof.
 
 ## GitHub Action publisher
 
