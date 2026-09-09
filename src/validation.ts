@@ -1,5 +1,5 @@
-import { base64 } from "@scure/base";
-import { parseDictionary, type BareItem, type Dictionary } from "structured-headers";
+import { parseDictionary } from "structured-headers";
+import { z } from "zod";
 
 export const PROJECT = "kosmo-native" as const;
 export const PROTOCOL_VERSION = "1" as const;
@@ -13,102 +13,89 @@ const SHA256_HEX = /^[a-f0-9]{64}$/;
 const RUNTIME = /^[^/\\\u0000-\u001f\u007f]+$/;
 const MIME_TYPE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-type Platform = "ios" | "android";
-type Channel = "staging" | "production";
+const platformSchema = z.enum(["ios", "android"]);
+const channelSchema = z.enum(["staging", "production"]);
+const runtimeSchema = z.string().min(1).regex(RUNTIME).refine((value) => value !== "." && value !== "..");
+const hashSchema = z.string().regex(SHA256_HEX);
 
-export type ManifestRoute = {
-  kind: "manifest";
-  platform: Platform;
-  channel: Channel;
-  runtime: string;
-};
+const routePrefix = [
+  z.literal(""),
+  z.literal("v1"),
+  z.literal("projects"),
+  z.literal(PROJECT),
+  z.literal("platforms"),
+  platformSchema,
+  z.literal("channels"),
+  channelSchema,
+  z.literal("runtimes"),
+  runtimeSchema,
+] as const;
 
-export type AssetRoute = {
-  kind: "asset";
-  platform: Platform;
-  channel: Channel;
-  runtime: string;
-  hash: string;
-};
+const manifestPathSchema = z
+  .tuple([...routePrefix, z.literal("manifest")])
+  .transform(([, , , , , platform, , channel, , runtime]) => ({
+    kind: "manifest" as const,
+    platform,
+    channel,
+    runtime,
+  }));
+const assetPathSchema = z
+  .tuple([...routePrefix, z.literal("assets"), hashSchema])
+  .transform(([, , , , , platform, , channel, , runtime, , hash]) => ({
+    kind: "asset" as const,
+    platform,
+    channel,
+    runtime,
+    hash,
+  }));
 
+export type ManifestRoute = z.infer<typeof manifestPathSchema>;
+export type AssetRoute = z.infer<typeof assetPathSchema>;
 export type Route = ManifestRoute | AssetRoute;
 
-export interface ParsedSignature {
+export const manifestRequestHeadersSchema = z.object({
+  protocol: z.string(),
+  platform: platformSchema,
+  runtime: runtimeSchema,
+});
+
+export const contentTypeSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .refine((value) => MIME_TYPE.test(value.split(";", 1)[0]?.trim() ?? ""));
+export const manifestContentTypeSchema = contentTypeSchema.refine((value) =>
+  MANIFEST_CONTENT_TYPES.has(value.split(";", 1)[0]?.trim().toLowerCase() ?? ""),
+);
+export const contentEncodingSchema = z.union([z.undefined(), z.literal(""), z.string().regex(/^identity$/i)]);
+
+export type ParsedSignature = {
   keyid: string;
   alg: typeof SIGNING_ALGORITHM;
-}
+};
 
-export interface SignatureExpectation {
+export type SignatureExpectation = {
   keyid?: string;
   alg?: typeof SIGNING_ALGORITHM;
-}
+};
 
-function decodeSegment(segment: string | undefined): string | undefined {
-  if (!segment) return undefined;
+function decodePath(pathname: string): string[] | undefined {
   try {
-    return decodeURIComponent(segment);
+    return pathname.split("/").map(decodeURIComponent);
   } catch {
     return undefined;
   }
 }
 
-function isPlatform(value: string | undefined): value is Platform {
-  return value === "ios" || value === "android";
-}
-
-function isChannel(value: string | undefined): value is Channel {
-  return value === "staging" || value === "production";
-}
-
-function decodeRuntime(segment: string | undefined): string | undefined {
-  const runtime = decodeSegment(segment);
-  if (!runtime || runtime === "." || runtime === ".." || !RUNTIME.test(runtime)) return undefined;
-  return runtime;
-}
-
 export function parseRoute(pathname: string): Route | undefined {
-  const parts = pathname.split("/");
-  const [
-    ,
-    version,
-    projects,
-    project,
-    platforms,
-    platformSegment,
-    channels,
-    channelSegment,
-    runtimes,
-    runtimeSegment,
-    resource,
-    hashSegment,
-  ] = parts;
-  const platform = isPlatform(platformSegment) ? platformSegment : undefined;
-  const channel = isChannel(channelSegment) ? channelSegment : undefined;
-  const runtime = decodeRuntime(runtimeSegment);
+  const segments = decodePath(pathname);
+  if (!segments) return undefined;
 
-  if (
-    version !== "v1" ||
-    projects !== "projects" ||
-    project !== PROJECT ||
-    platforms !== "platforms" ||
-    !platform ||
-    channels !== "channels" ||
-    !channel ||
-    runtimes !== "runtimes" ||
-    !runtime
-  ) {
-    return undefined;
-  }
+  const manifest = manifestPathSchema.safeParse(segments);
+  if (manifest.success) return manifest.data;
 
-  if (resource === "manifest" && parts.length === 11 && hashSegment === undefined) {
-    return { kind: "manifest", platform, channel, runtime };
-  }
-
-  const hash = decodeSegment(hashSegment);
-  if (resource === "assets" && parts.length === 12 && hash && SHA256_HEX.test(hash)) {
-    return { kind: "asset", platform, channel, runtime, hash };
-  }
-  return undefined;
+  const asset = assetPathSchema.safeParse(segments);
+  return asset.success ? asset.data : undefined;
 }
 
 export function manifestKey(route: Pick<ManifestRoute, "platform" | "channel" | "runtime">): string {
@@ -119,144 +106,64 @@ export function assetKey(route: Pick<AssetRoute, "platform" | "channel" | "runti
   return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`;
 }
 
-export function isContentType(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0 || value.length > 128) return false;
-  const mediaType = value.split(";", 1)[0]?.trim() ?? "";
-  return MIME_TYPE.test(mediaType);
-}
+const emptyParametersSchema = z.instanceof(Map).refine((parameters) => parameters.size === 0);
+const signatureSchema = z
+  .object({
+    sig: z.tuple([z.string().min(1), emptyParametersSchema]),
+    keyid: z.tuple([z.string().min(1), emptyParametersSchema]),
+    alg: z.tuple([z.literal(SIGNING_ALGORITHM), emptyParametersSchema]),
+  })
+  .strict();
+const signatureExpectationSchema = z
+  .object({
+    sig: z.tuple([z.literal(true), emptyParametersSchema]),
+    keyid: z.tuple([z.string(), emptyParametersSchema]).optional(),
+    alg: z.tuple([z.literal(SIGNING_ALGORITHM), emptyParametersSchema]).optional(),
+  })
+  .strict();
 
-export function isUncompressed(value: unknown): boolean {
-  return value === undefined || value === "" || (typeof value === "string" && value.toLowerCase() === "identity");
-}
-
-export function isManifestContentType(value: unknown): value is string {
-  if (typeof value !== "string" || value.length > 128) return false;
-  const mediaType = value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  return MANIFEST_CONTENT_TYPES.has(mediaType);
-}
-
-function hasDuplicateDictionaryKeys(input: string): boolean {
-  const keys = new Set<string>();
-  let segmentStart = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = 0; index <= input.length; index += 1) {
-    const character = input[index];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === '"') inString = false;
-      continue;
-    }
-    if (character === '"') {
-      inString = true;
-      continue;
-    }
-    if (character !== "," && index !== input.length) continue;
-    const key = /^\s*([a-z][a-z0-9_*.-]*)/.exec(input.slice(segmentStart, index))?.[1];
-    if (!key || keys.has(key)) return true;
-    keys.add(key);
-    segmentStart = index + 1;
-  }
-  return inString;
-}
-
-function parseSfvDictionary(input: string): Dictionary | undefined {
-  if (hasDuplicateDictionaryKeys(input)) return undefined;
+function parseSfvDictionary(value: unknown): Record<string, unknown> | undefined {
+  const input = z.string().safeParse(value);
+  if (!input.success) return undefined;
   try {
-    return parseDictionary(input);
-  } catch {
-    return undefined;
-  }
-}
-
-function getSfvItem(dictionary: Dictionary, key: string): { value: BareItem; parameters: Map<string, BareItem> } | undefined {
-  const item = dictionary.get(key);
-  if (!item || !Array.isArray(item) || item.length !== 2 || Array.isArray(item[0]) || !(item[1] instanceof Map)) {
-    return undefined;
-  }
-  return { value: item[0] as BareItem, parameters: item[1] as Map<string, BareItem> };
-}
-
-export function decodeCanonicalBase64(value: string): Uint8Array | undefined {
-  try {
-    const decoded = base64.decode(value);
-    return base64.encode(decoded) === value ? decoded : undefined;
+    return Object.fromEntries(parseDictionary(input.data));
   } catch {
     return undefined;
   }
 }
 
 export function parseSignature(value: unknown): ParsedSignature | undefined {
-  if (typeof value !== "string") return undefined;
-  const dictionary = parseSfvDictionary(value);
-  const signature = dictionary && getSfvItem(dictionary, "sig");
-  const keyid = dictionary && getSfvItem(dictionary, "keyid");
-  const alg = dictionary && getSfvItem(dictionary, "alg");
-  if (
-    !dictionary ||
-    dictionary.size !== 3 ||
-    !signature ||
-    signature.parameters.size !== 0 ||
-    typeof signature.value !== "string" ||
-    !keyid ||
-    keyid.parameters.size !== 0 ||
-    typeof keyid.value !== "string" ||
-    keyid.value.length === 0 ||
-    !alg ||
-    alg.parameters.size !== 0 ||
-    typeof alg.value !== "string" ||
-    alg.value !== SIGNING_ALGORITHM ||
-    !decodeCanonicalBase64(signature.value)?.length
-  ) {
-    return undefined;
-  }
-  return { keyid: keyid.value, alg: SIGNING_ALGORITHM };
+  const result = signatureSchema.safeParse(parseSfvDictionary(value));
+  if (!result.success) return undefined;
+  return { keyid: result.data.keyid[0], alg: result.data.alg[0] };
 }
 
 export function parseSignatureExpectation(value: string): SignatureExpectation | undefined {
-  const dictionary = parseSfvDictionary(value);
-  const sig = dictionary && getSfvItem(dictionary, "sig");
-  const keyid = dictionary && getSfvItem(dictionary, "keyid");
-  const alg = dictionary && getSfvItem(dictionary, "alg");
-  if (
-    !dictionary ||
-    dictionary.size > 3 ||
-    !sig ||
-    sig.parameters.size !== 0 ||
-    sig.value !== true ||
-    (keyid !== undefined && (keyid.parameters.size !== 0 || typeof keyid.value !== "string")) ||
-    (alg !== undefined && (alg.parameters.size !== 0 || alg.value !== SIGNING_ALGORITHM)) ||
-    (keyid === undefined && dictionary.has("keyid")) ||
-    (alg === undefined && dictionary.has("alg")) ||
-    [...dictionary.keys()].some((key) => !["sig", "keyid", "alg"].includes(key))
-  ) {
-    return undefined;
-  }
+  const result = signatureExpectationSchema.safeParse(parseSfvDictionary(value));
+  if (!result.success) return undefined;
   return {
-    ...(keyid === undefined ? {} : { keyid: keyid.value as string }),
-    ...(alg === undefined ? {} : { alg: SIGNING_ALGORITHM }),
+    ...(result.data.keyid === undefined ? {} : { keyid: result.data.keyid[0] }),
+    ...(result.data.alg === undefined ? {} : { alg: result.data.alg[0] }),
   };
 }
+
+const qualitySchema = z.coerce.number().finite().nonnegative();
 
 export function accepts(contentType: string, accept: string | undefined): boolean {
   if (!accept) return true;
 
   const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  if (!mediaType || !mediaType.includes("/")) return false;
-
   let bestSpecificity = -1;
   let bestQuality = 0;
   for (const entry of accept.split(",")) {
     const [rawCandidate, ...parameters] = entry.trim().toLowerCase().split(";");
     const candidate = rawCandidate?.trim() ?? "";
     if (!candidate) continue;
-    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
-    let qualityValue = 1;
-    if (quality) {
-      qualityValue = Number(quality.trim().slice(2));
-      if (!Number.isFinite(qualityValue) || qualityValue < 0) continue;
-    }
+
+    const rawQuality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+    const quality = qualitySchema.safeParse(rawQuality?.trim().slice(2) ?? "1");
+    if (!quality.success) continue;
+    const qualityValue = quality.data;
 
     const specificity =
       candidate === mediaType ? 2 : candidate === `${mediaType.split("/", 1)[0]}/*` ? 1 : candidate === "*/*" ? 0 : -1;
