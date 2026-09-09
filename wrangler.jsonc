@@ -1,9 +1,15 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "expo-ota-local-test-only",
+  "name": "expo-ota",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-07",
   "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "expo-ota.byulmaru.co",
+      "custom_domain": true
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
@@ -11,7 +17,7 @@
   "r2_buckets": [
     {
       "binding": "RELEASES",
-      "bucket_name": "expo-ota-local-test-only"
+      "bucket_name": "expo-ota"
     }
   ]
 }

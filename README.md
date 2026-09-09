@@ -38,7 +38,11 @@ The channel is part of the asset URL in this contract. Promoting a manifest betw
 
 Rollback should republish known-good assets in a new manifest with a new UUID and a strictly later `createdAt`, sign those exact bytes, and overwrite the fixed tuple object with the new body and matching signature metadata. It does not delete old assets. Copying older bytes only changes what the server selects; an older `createdAt` does not force clients that already applied a newer update to downgrade.
 
-This repository has no production deployment, live R2, or device-application proof. The checks below cover the Worker bundle and local R2 test harness only.
+## Production deployment status
+
+The read-only delivery Worker is deployed in Cloudflare account `676a2d8e52515abd22c0edda7364cf73` as `expo-ota` from source commit `ccc9e23b2021a8edfc174bf55ad6b7978a955008` (version `311d0fe3-5b5f-43a5-b5c9-40d01666e817`). It is exposed only through the custom domain `https://expo-ota.byulmaru.co`; `workers_dev` and custom-domain previews are disabled, and the `expo-ota` R2 bucket has no enabled `r2.dev` or custom public domains.
+
+At verification on 2026-09-09, the `expo-ota` R2 bucket was empty (`object_count: 0`, `bucket_size: 0 B`). Live HTTP checks returned the expected routing responses: `/` returned `404 {"error":"not found"}`, and a valid manifest request returned `404 {"error":"release not found"}` because no OTA object has been published. This confirms Worker routing and empty-bucket behavior only; release publication, client/device application, and production update delivery remain unverified.
 
 ## Development
 
