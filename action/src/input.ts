@@ -1,44 +1,38 @@
 import { z } from "zod";
 
-const platformSchema = z.enum(["ios", "android"], {
-  error: 'Input "platform" must be ios or android',
-});
-const channelSchema = z.enum(["staging", "production"], {
-  error: 'Input "channel" must be staging or production',
-});
-const pathSegmentSchema = (name: string) =>
-  z.string().min(1).refine(
-    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
-    `Input "${name}" must be one non-empty path segment`,
-  );
-const projectSchema = pathSegmentSchema("project");
-const runtimeVersionSchema = pathSegmentSchema("runtime-version");
-const publicBaseUrlSchema = z
-  .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
-  .refine((value) => {
-    const url = new URL(value);
-    return !(url.username || url.password || url.search || url.hash);
-  }, 'Input "public-base-url" must not contain credentials, query, or fragment')
-  .transform((value) => value.replace(/\/+$/u, ""));
-const r2AccountIdSchema = z.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
-  error: 'Input "r2-account-id" contains invalid characters',
-});
-const keyidSchema = z.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
-  error: 'Input "keyid" must be an SFV token',
-});
 const actionInputsSchema = z.object({
   exportDir: z.string().min(1),
-  project: projectSchema,
-  platform: platformSchema,
-  channel: channelSchema,
-  runtimeVersion: runtimeVersionSchema,
-  publicBaseUrl: publicBaseUrlSchema,
+  project: z.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    'Input "project" must be one non-empty path segment',
+  ),
+  platform: z.enum(["ios", "android"], {
+    error: 'Input "platform" must be ios or android',
+  }),
+  channel: z.enum(["staging", "production"], {
+    error: 'Input "channel" must be staging or production',
+  }),
+  runtimeVersion: z.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    'Input "runtime-version" must be one non-empty path segment',
+  ),
+  publicBaseUrl: z
+    .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
+    .refine((value) => {
+      const url = new URL(value);
+      return !(url.username || url.password || url.search || url.hash);
+    }, 'Input "public-base-url" must not contain credentials, query, or fragment')
+    .transform((value) => value.replace(/\/+$/u, "")),
   r2Bucket: z.string().min(1),
-  r2AccountId: r2AccountIdSchema,
+  r2AccountId: z.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
+    error: 'Input "r2-account-id" contains invalid characters',
+  }),
   r2AccessKeyId: z.string().min(1),
   r2SecretAccessKey: z.string().min(1),
   signingPrivateKey: z.string().min(1),
-  keyid: keyidSchema,
+  keyid: z.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
+    error: 'Input "keyid" must be an SFV token',
+  }),
 });
 
 export type ActionInputs = z.infer<typeof actionInputsSchema>;

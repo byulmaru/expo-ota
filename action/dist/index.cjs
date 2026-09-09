@@ -50294,41 +50294,36 @@ function date4(params) {
 config(en_default());
 
 // action/src/input.ts
-var platformSchema = external_exports.enum(["ios", "android"], {
-  error: 'Input "platform" must be ios or android'
-});
-var channelSchema = external_exports.enum(["staging", "production"], {
-  error: 'Input "channel" must be staging or production'
-});
-var pathSegmentSchema = (name) => external_exports.string().min(1).refine(
-  (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
-  `Input "${name}" must be one non-empty path segment`
-);
-var projectSchema = pathSegmentSchema("project");
-var runtimeVersionSchema = pathSegmentSchema("runtime-version");
-var publicBaseUrlSchema = external_exports.url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' }).refine((value) => {
-  const url2 = new URL(value);
-  return !(url2.username || url2.password || url2.search || url2.hash);
-}, 'Input "public-base-url" must not contain credentials, query, or fragment').transform((value) => value.replace(/\/+$/u, ""));
-var r2AccountIdSchema = external_exports.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
-  error: 'Input "r2-account-id" contains invalid characters'
-});
-var keyidSchema = external_exports.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
-  error: 'Input "keyid" must be an SFV token'
-});
 var actionInputsSchema = external_exports.object({
   exportDir: external_exports.string().min(1),
-  project: projectSchema,
-  platform: platformSchema,
-  channel: channelSchema,
-  runtimeVersion: runtimeVersionSchema,
-  publicBaseUrl: publicBaseUrlSchema,
+  project: external_exports.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    'Input "project" must be one non-empty path segment'
+  ),
+  platform: external_exports.enum(["ios", "android"], {
+    error: 'Input "platform" must be ios or android'
+  }),
+  channel: external_exports.enum(["staging", "production"], {
+    error: 'Input "channel" must be staging or production'
+  }),
+  runtimeVersion: external_exports.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    'Input "runtime-version" must be one non-empty path segment'
+  ),
+  publicBaseUrl: external_exports.url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' }).refine((value) => {
+    const url2 = new URL(value);
+    return !(url2.username || url2.password || url2.search || url2.hash);
+  }, 'Input "public-base-url" must not contain credentials, query, or fragment').transform((value) => value.replace(/\/+$/u, "")),
   r2Bucket: external_exports.string().min(1),
-  r2AccountId: r2AccountIdSchema,
+  r2AccountId: external_exports.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
+    error: 'Input "r2-account-id" contains invalid characters'
+  }),
   r2AccessKeyId: external_exports.string().min(1),
   r2SecretAccessKey: external_exports.string().min(1),
   signingPrivateKey: external_exports.string().min(1),
-  keyid: keyidSchema
+  keyid: external_exports.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
+    error: 'Input "keyid" must be an SFV token'
+  })
 });
 function input(name, fallback2) {
   const value = process.env[`INPUT_${name.toUpperCase()}`];
@@ -50368,16 +50363,6 @@ var import_node_crypto7 = require("node:crypto");
 var import_promises3 = require("node:fs/promises");
 var import_node_path6 = require("node:path");
 var SIGNING_ALGORITHM = "rsa-v1_5-sha256";
-var exportAssetSchema = external_exports.object({ path: external_exports.string(), ext: external_exports.string() });
-var platformMetadataSchema = external_exports.object({
-  bundle: external_exports.string().min(1),
-  assets: external_exports.array(exportAssetSchema)
-});
-var exportMetadataSchema = external_exports.object({
-  version: external_exports.literal(0),
-  bundler: external_exports.literal("metro"),
-  fileMetadata: external_exports.record(external_exports.string(), external_exports.unknown())
-});
 var MIME_TYPES = {
   aac: "audio/aac",
   avif: "image/avif",
@@ -50450,13 +50435,13 @@ function hashObject(body) {
     md5Hex: md5.toString("hex")
   };
 }
-async function prepareFile(exportRoot, metadataAsset, assetBaseUrl, prefix, contentType) {
-  const filePath = await resolveExportFile(exportRoot, metadataAsset.path);
+async function prepareFile(exportRoot, metadataPath, metadataExtension, assetBaseUrl, prefix, contentType) {
+  const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await (0, import_promises3.readFile)(filePath);
   const hashes = hashObject(body);
   let fileExtension;
-  if (metadataAsset.ext) {
-    const normalizedExtension = metadataAsset.ext.startsWith(".") ? metadataAsset.ext.slice(1) : metadataAsset.ext;
+  if (metadataExtension) {
+    const normalizedExtension = metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalizedExtension)) {
       throw new Error("metadata.json contains an invalid asset extension");
     }
@@ -50485,14 +50470,22 @@ async function prepareRelease(input2) {
   } catch {
     throw new Error("metadata.json is not valid JSON");
   }
-  const validatedMetadata = exportMetadataSchema.safeParse(parsedMetadata);
+  const validatedMetadata = external_exports.object({
+    version: external_exports.literal(0),
+    bundler: external_exports.literal("metro"),
+    fileMetadata: external_exports.record(external_exports.string(), external_exports.unknown())
+  }).safeParse(parsedMetadata);
   if (!validatedMetadata.success) throw new Error("Only Expo Metro metadata.json version 0 exports are supported");
   const metadata = validatedMetadata.data.fileMetadata;
-  const platformMetadata = platformMetadataSchema.safeParse(metadata[validatedInput.platform]);
+  const platformMetadata = external_exports.object({
+    bundle: external_exports.string().min(1),
+    assets: external_exports.array(external_exports.object({ path: external_exports.string(), ext: external_exports.string() }))
+  }).safeParse(metadata[validatedInput.platform]);
   if (!platformMetadata.success) throw new Error("metadata.json has no valid export for the selected platform");
   const launch = await prepareFile(
     exportRoot,
-    { path: platformMetadata.data.bundle, ext: "" },
+    platformMetadata.data.bundle,
+    "",
     assetBaseUrl,
     prefix,
     "application/javascript"
@@ -50503,7 +50496,7 @@ async function prepareRelease(input2) {
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension] : "application/octet-stream";
-        return prepareFile(exportRoot, asset, assetBaseUrl, prefix, contentType);
+        return prepareFile(exportRoot, asset.path, asset.ext, assetBaseUrl, prefix, contentType);
       })
     )
   ];

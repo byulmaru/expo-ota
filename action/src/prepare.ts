@@ -6,17 +6,6 @@ import { parseActionInputs, type ActionInputs } from "./input";
 
 const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 
-const exportAssetSchema = z.object({ path: z.string(), ext: z.string() });
-const platformMetadataSchema = z.object({
-  bundle: z.string().min(1),
-  assets: z.array(exportAssetSchema),
-});
-const exportMetadataSchema = z.object({
-  version: z.literal(0),
-  bundler: z.literal("metro"),
-  fileMetadata: z.record(z.string(), z.unknown()),
-});
-
 export interface PreparedObject {
   key: string;
   body: Buffer;
@@ -35,8 +24,6 @@ export interface PreparedRelease {
   signature: string;
   assets: PreparedObject[];
 }
-
-type ExportAsset = z.infer<typeof exportAssetSchema>;
 
 const MIME_TYPES: Record<string, string> = {
   aac: "audio/aac",
@@ -122,17 +109,18 @@ export function hashObject(
 
 async function prepareFile(
   exportRoot: string,
-  metadataAsset: ExportAsset,
+  metadataPath: string,
+  metadataExtension: string,
   assetBaseUrl: string,
   prefix: string,
   contentType: string,
 ): Promise<PreparedObject & { fileExtension?: string; url: string }> {
-  const filePath = await resolveExportFile(exportRoot, metadataAsset.path);
+  const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await readFile(filePath);
   const hashes = hashObject(body);
   let fileExtension: string | undefined;
-  if (metadataAsset.ext) {
-    const normalizedExtension = metadataAsset.ext.startsWith(".") ? metadataAsset.ext.slice(1) : metadataAsset.ext;
+  if (metadataExtension) {
+    const normalizedExtension = metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalizedExtension)) {
       throw new Error("metadata.json contains an invalid asset extension");
     }
@@ -162,15 +150,27 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
   } catch {
     throw new Error("metadata.json is not valid JSON");
   }
-  const validatedMetadata = exportMetadataSchema.safeParse(parsedMetadata);
+  const validatedMetadata = z
+    .object({
+      version: z.literal(0),
+      bundler: z.literal("metro"),
+      fileMetadata: z.record(z.string(), z.unknown()),
+    })
+    .safeParse(parsedMetadata);
   if (!validatedMetadata.success) throw new Error("Only Expo Metro metadata.json version 0 exports are supported");
   const metadata = validatedMetadata.data.fileMetadata;
-  const platformMetadata = platformMetadataSchema.safeParse(metadata[validatedInput.platform]);
+  const platformMetadata = z
+    .object({
+      bundle: z.string().min(1),
+      assets: z.array(z.object({ path: z.string(), ext: z.string() })),
+    })
+    .safeParse(metadata[validatedInput.platform]);
   if (!platformMetadata.success) throw new Error("metadata.json has no valid export for the selected platform");
 
   const launch = await prepareFile(
     exportRoot,
-    { path: platformMetadata.data.bundle, ext: "" },
+    platformMetadata.data.bundle,
+    "",
     assetBaseUrl,
     prefix,
     "application/javascript",
@@ -181,7 +181,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension]! : "application/octet-stream";
-        return prepareFile(exportRoot, asset, assetBaseUrl, prefix, contentType);
+        return prepareFile(exportRoot, asset.path, asset.ext, assetBaseUrl, prefix, contentType);
       }),
     )),
   ];
