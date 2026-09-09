@@ -50294,9 +50294,6 @@ function date4(params) {
 config(en_default());
 
 // action/src/input.ts
-var DEFAULT_PUBLIC_BASE_URL = "https://expo-ota.byulmaru.co";
-var DEFAULT_R2_BUCKET = "expo-ota";
-var DEFAULT_R2_ACCOUNT_ID = "676a2d8e52515abd22c0edda7364cf73";
 var actionInputsSchema = external_exports.object({
   exportDir: external_exports.string().min(1),
   project: external_exports.string().min(1).refine(
@@ -50316,11 +50313,11 @@ var actionInputsSchema = external_exports.object({
   publicBaseUrl: external_exports.url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' }).refine((value) => {
     const url2 = new URL(value);
     return !(url2.username || url2.password || url2.search || url2.hash);
-  }, 'Input "public-base-url" must not contain credentials, query, or fragment').transform((value) => value.replace(/\/+$/u, "")).default(DEFAULT_PUBLIC_BASE_URL),
-  r2Bucket: external_exports.string().min(1).default(DEFAULT_R2_BUCKET),
+  }, 'Input "public-base-url" must not contain credentials, query, or fragment').transform((value) => value.replace(/\/+$/u, "")),
+  r2Bucket: external_exports.string().min(1),
   r2AccountId: external_exports.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
     error: 'Input "r2-account-id" contains invalid characters'
-  }).default(DEFAULT_R2_ACCOUNT_ID),
+  }),
   r2AccessKeyId: external_exports.string().min(1),
   r2SecretAccessKey: external_exports.string().min(1),
   signingPrivateKey: external_exports.string().min(1),
@@ -50347,9 +50344,9 @@ function readActionInputs() {
     platform: input("platform"),
     channel: input("channel"),
     runtimeVersion: input("runtime-version"),
-    publicBaseUrl: input("public-base-url", DEFAULT_PUBLIC_BASE_URL),
-    r2Bucket: input("r2-bucket", DEFAULT_R2_BUCKET),
-    r2AccountId: input("r2-account-id", DEFAULT_R2_ACCOUNT_ID),
+    publicBaseUrl: input("public-base-url"),
+    r2Bucket: input("r2-bucket"),
+    r2AccountId: input("r2-account-id"),
     r2AccessKeyId: input("r2-access-key-id"),
     r2SecretAccessKey: input("r2-secret-access-key"),
     signingPrivateKey: input("signing-private-key"),

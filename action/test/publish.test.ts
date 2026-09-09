@@ -21,6 +21,9 @@ function inputs(
     platform: "ios",
     channel: "staging",
     runtimeVersion: "fingerprint test",
+    publicBaseUrl: "https://expo-ota.byulmaru.co",
+    r2Bucket: "expo-ota",
+    r2AccountId: "676a2d8e52515abd22c0edda7364cf73",
     r2AccessKeyId: "access",
     r2SecretAccessKey: "secret",
     signingPrivateKey: privateKey,
@@ -76,31 +79,28 @@ afterEach(async () => {
 });
 
 describe("Expo OTA publish action", () => {
-  it("uses service defaults and accepts validated overrides", () => {
-    const defaults = parseActionInputs({
-      exportDir: "export",
-      project: "kosmo-native",
-      platform: "ios",
-      channel: "staging",
-      runtimeVersion: "fingerprint test",
-      r2AccessKeyId: "access",
-      r2SecretAccessKey: "secret",
-      signingPrivateKey: "private-key",
-      keyid: "main",
-    });
-    expect(defaults.publicBaseUrl).toBe("https://expo-ota.byulmaru.co");
-    expect(defaults.r2Bucket).toBe("expo-ota");
-    expect(defaults.r2AccountId).toBe("676a2d8e52515abd22c0edda7364cf73");
+  it("requires explicit service inputs and accepts validated overrides", () => {
+    const explicitValues = inputs("export", "private-key");
+    for (const missing of ["publicBaseUrl", "r2Bucket", "r2AccountId"] as const) {
+      const withoutServiceInput: Record<string, unknown> = { ...explicitValues };
+      delete withoutServiceInput[missing];
+      expect(() => parseActionInputs(withoutServiceInput)).toThrow();
+    }
 
-    const overrides = parseActionInputs({
-      ...defaults,
+    const explicit = parseActionInputs(explicitValues);
+    expect(explicit.publicBaseUrl).toBe("https://expo-ota.byulmaru.co");
+    expect(explicit.r2Bucket).toBe("expo-ota");
+    expect(explicit.r2AccountId).toBe("676a2d8e52515abd22c0edda7364cf73");
+
+    const custom = parseActionInputs({
+      ...explicit,
       publicBaseUrl: "https://updates.example.test/",
       r2Bucket: "custom-releases",
       r2AccountId: "custom-account",
     });
-    expect(overrides.publicBaseUrl).toBe("https://updates.example.test");
-    expect(overrides.r2Bucket).toBe("custom-releases");
-    expect(overrides.r2AccountId).toBe("custom-account");
+    expect(custom.publicBaseUrl).toBe("https://updates.example.test");
+    expect(custom.r2Bucket).toBe("custom-releases");
+    expect(custom.r2AccountId).toBe("custom-account");
   });
 
   it("rejects unsafe service overrides before preparing a release", () => {
