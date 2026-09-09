@@ -7,7 +7,7 @@ import {
   manifestRequestHeadersSchema,
 } from "./validation";
 
-const RELEASE_PATH = "/v1/projects/kosmo-native/platforms/:platform/channels/:channel/runtimes/:runtime";
+const RELEASE_PATH = "/v1/projects/:project/platforms/:platform/channels/:channel/runtimes/:runtime";
 
 const app = new Hono<{ Bindings: Env }>();
 

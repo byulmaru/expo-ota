@@ -8,15 +8,17 @@ The Action is the publisher. It must receive an already-built, approved export f
 
 ## Routes and R2 keys
 
-- `GET /v1/projects/kosmo-native/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/manifest`
-- `GET /v1/projects/kosmo-native/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/assets/{lowercase-sha256-hex}`
+- `GET /v1/projects/{project}/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/manifest`
+- `GET /v1/projects/{project}/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/assets/{lowercase-sha256-hex}`
 
 The route tuple maps directly to these keys:
 
 ```text
-releases/kosmo-native/{platform}/{channel}/{runtime}/manifest.json
-releases/kosmo-native/{platform}/{channel}/{runtime}/assets/{lowercase-sha256-hex}
+releases/{project}/{platform}/{channel}/{runtime}/manifest.json
+releases/{project}/{platform}/{channel}/{runtime}/assets/{lowercase-sha256-hex}
 ```
+
+`project` is a caller-selected, nonempty path segment. The Worker accepts any project value that does not contain `/`, `\`, or control characters and is not `.` or `..`; it does not maintain a project registry or allowlist.
 
 The manifest object must have an Expo manifest content type (`application/expo+json` or `application/json`) and a `signature` custom metadata value in Expo Structured Field Value form:
 
