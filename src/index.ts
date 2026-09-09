@@ -1,19 +1,40 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
 import { getAsset, getManifest } from "./release";
-import { parseRoute } from "./validation";
+import {
+  assetParamsSchema,
+  manifestParamsSchema,
+  manifestRequestHeadersSchema,
+} from "./validation";
 
-function notFound(): Response {
-  return Response.json({ error: "not found" }, { status: 404 });
-}
+const RELEASE_PATH = "/v1/projects/kosmo-native/platforms/:platform/channels/:channel/runtimes/:runtime";
 
-const worker = {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+const app = new Hono<{ Bindings: Env }>();
 
-    const route = parseRoute(new URL(request.url).pathname);
-    if (!route) return notFound();
-    if (route.kind === "manifest") return getManifest(request, env, route);
-    return getAsset(route, env);
-  },
-} satisfies ExportedHandler<Env>;
+app.use("*", async (c, next) => {
+  if (c.req.method !== "GET") return c.text("Method Not Allowed", 405);
+  await next();
+});
 
-export default worker;
+app.notFound((c) => c.json({ error: "not found" }, 404));
+
+app.get(
+  `${RELEASE_PATH}/manifest`,
+  zValidator("param", manifestParamsSchema, (result, c) => {
+    if (!result.success) return c.notFound();
+  }),
+  zValidator("header", manifestRequestHeadersSchema, (result, c) => {
+    if (!result.success) return c.json({ error: "unsupported expo protocol version" }, 400);
+  }),
+  (c) => getManifest(c.req.raw, c.env, c.req.valid("param"), c.req.valid("header")),
+);
+
+app.get(
+  `${RELEASE_PATH}/assets/:hash`,
+  zValidator("param", assetParamsSchema, (result, c) => {
+    if (!result.success) return c.notFound();
+  }),
+  (c) => getAsset(c.req.valid("param"), c.env),
+);
+
+export default app;

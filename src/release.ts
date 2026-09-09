@@ -3,7 +3,7 @@ import {
   contentEncodingSchema,
   contentTypeSchema,
   DEFAULT_MANIFEST_CACHE_CONTROL,
-  manifestRequestHeadersSchema,
+  type ManifestRequestHeaders,
   manifestContentTypeSchema,
   PROTOCOL_VERSION,
   SFV_VERSION,
@@ -30,36 +30,33 @@ function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
 }
 
-export async function getManifest(request: Request, env: Env, route: ManifestRoute): Promise<Response> {
-  const requestHeaders = manifestRequestHeadersSchema.safeParse({
-    protocol: request.headers.get("expo-protocol-version") ?? undefined,
-    platform: request.headers.get("expo-platform") ?? undefined,
-    runtime: request.headers.get("expo-runtime-version") ?? undefined,
-  });
-  if (!requestHeaders.success || requestHeaders.data.protocol !== PROTOCOL_VERSION) {
-    return jsonError(400, "unsupported expo protocol version");
-  }
-  if (requestHeaders.data.platform !== route.platform || requestHeaders.data.runtime !== route.runtime) {
+export async function getManifest(
+  request: Request,
+  env: Env,
+  route: ManifestRoute,
+  requestHeaders: ManifestRequestHeaders,
+): Promise<Response> {
+  if (
+    requestHeaders["expo-platform"] !== route.platform ||
+    requestHeaders["expo-runtime-version"] !== route.runtime
+  ) {
     return jsonError(400, "request headers do not match release tuple");
   }
 
-  const expectationHeader = request.headers.get("expo-expect-signature");
-  const expected = expectationHeader === null ? undefined : parseSignatureExpectation(expectationHeader);
-  if (expectationHeader !== null && !expected) return jsonError(400, "invalid signature expectation");
+  const expectationHeader = requestHeaders["expo-expect-signature"];
+  const expected = expectationHeader === undefined ? undefined : parseSignatureExpectation(expectationHeader);
+  if (expectationHeader !== undefined && !expected) {
+    return jsonError(400, "invalid signature expectation");
+  }
 
   const object = await env.RELEASES.get(manifestKey(route));
   const metadata = manifestMetadataSchema.safeParse({
     contentType: object?.httpMetadata?.contentType,
     contentEncoding: object?.httpMetadata?.contentEncoding,
   });
-  const signatureText = object?.customMetadata?.signature;
+  const signatureText = object?.customMetadata?.signature ?? "";
   const signature = parseSignature(signatureText);
-  if (
-    !object ||
-    !metadata.success ||
-    !signatureText ||
-    !signature
-  ) {
+  if (!object || !metadata.success || !signature) {
     return jsonError(404, "release not found");
   }
   if (

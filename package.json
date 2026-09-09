@@ -26,6 +26,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1127.0",
+    "@hono/zod-validator": "^0.9.1",
+    "hono": "^4.13.7",
     "structured-headers": "2.0.3",
     "zod": "4.4.3"
   }
