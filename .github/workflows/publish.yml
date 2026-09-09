@@ -74,13 +74,16 @@ jobs:
           url: https://vault.tail1fdd55.ts.net
 
       - name: Publish Expo OTA update
-        uses: byulmaru/expo-ota@06558bb4151660c7aca56c87c55457c67329146e
+        uses: byulmaru/expo-ota@d0d65208bd8302be6e95b6a616bfa3f113d22b19
         with:
           channel: ${{ inputs.channel }}
           export-dir: .artifacts/expo-export
           keyid: ${{ inputs.keyid }}
           platform: ${{ inputs.platform }}
           project: ${{ inputs.project }}
+          public-base-url: https://expo-ota.byulmaru.co
+          r2-account-id: 676a2d8e52515abd22c0edda7364cf73
+          r2-bucket: expo-ota
           r2-access-key-id: ${{ steps.vault.outputs.R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ steps.vault.outputs.R2_SECRET_ACCESS_KEY }}
           runtime-version: ${{ inputs.runtime_version }}
