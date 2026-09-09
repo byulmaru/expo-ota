@@ -2,13 +2,12 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   ASSET_CACHE_CONTROL,
-  assetParamsSchema,
   contentEncodingSchema,
   contentTypeSchema,
   DEFAULT_MANIFEST_CACHE_CONTROL,
   manifestParamsSchema,
-  manifestRequestHeadersSchema,
-  manifestContentTypeSchema,
+  pathSegmentSchema,
+  platformSchema,
   PROTOCOL_VERSION,
   SFV_VERSION,
   accepts,
@@ -17,15 +16,6 @@ import {
 } from "./validation";
 import { z } from "zod";
 
-const manifestMetadataSchema = z.object({
-  contentType: manifestContentTypeSchema,
-  contentEncoding: contentEncodingSchema,
-});
-const assetMetadataSchema = z.object({
-  contentType: contentTypeSchema,
-  contentEncoding: contentEncodingSchema,
-});
-
 export const releaseApp = new Hono<{ Bindings: Env }>();
 
 releaseApp.get(
@@ -33,9 +23,18 @@ releaseApp.get(
   zValidator("param", manifestParamsSchema, (result, c) => {
     if (!result.success) return c.notFound();
   }),
-  zValidator("header", manifestRequestHeadersSchema, (result, c) => {
-    if (!result.success) return c.json({ error: "unsupported expo protocol version" }, 400);
-  }),
+  zValidator(
+    "header",
+    z.object({
+      "expo-protocol-version": z.literal(PROTOCOL_VERSION),
+      "expo-platform": platformSchema,
+      "expo-runtime-version": pathSegmentSchema,
+      "expo-expect-signature": z.string().optional(),
+    }),
+    (result, c) => {
+      if (!result.success) return c.json({ error: "unsupported expo protocol version" }, 400);
+    },
+  ),
   async (c) => {
     const route = c.req.valid("param");
     const requestHeaders = c.req.valid("header");
@@ -55,10 +54,19 @@ releaseApp.get(
     const object = await c.env.RELEASES.get(
       `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`,
     );
-    const metadata = manifestMetadataSchema.safeParse({
-      contentType: object?.httpMetadata?.contentType,
-      contentEncoding: object?.httpMetadata?.contentEncoding,
-    });
+    const metadata = z
+      .object({
+        contentType: contentTypeSchema.refine((value) =>
+          ["application/expo+json", "application/json"].includes(
+            value.split(";", 1)[0]?.trim().toLowerCase() ?? "",
+          ),
+        ),
+        contentEncoding: contentEncodingSchema,
+      })
+      .safeParse({
+        contentType: object?.httpMetadata?.contentType,
+        contentEncoding: object?.httpMetadata?.contentEncoding,
+      });
     const signatureText = object?.customMetadata?.signature ?? "";
     const signature = parseSignature(signatureText);
     if (!object || !metadata.success || !signature) {
@@ -89,18 +97,27 @@ releaseApp.get(
 
 releaseApp.get(
   "/assets/:hash",
-  zValidator("param", assetParamsSchema, (result, c) => {
-    if (!result.success) return c.notFound();
-  }),
+  zValidator(
+    "param",
+    manifestParamsSchema.extend({ hash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    (result, c) => {
+      if (!result.success) return c.notFound();
+    },
+  ),
   async (c) => {
     const route = c.req.valid("param");
     const object = await c.env.RELEASES.get(
       `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`,
     );
-    const metadata = assetMetadataSchema.safeParse({
-      contentType: object?.httpMetadata?.contentType,
-      contentEncoding: object?.httpMetadata?.contentEncoding,
-    });
+    const metadata = z
+      .object({
+        contentType: contentTypeSchema,
+        contentEncoding: contentEncodingSchema,
+      })
+      .safeParse({
+        contentType: object?.httpMetadata?.contentType,
+        contentEncoding: object?.httpMetadata?.contentEncoding,
+      });
     if (!object || !metadata.success) {
       return c.json({ error: "asset not found" }, 404);
     }
