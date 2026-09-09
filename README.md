@@ -55,14 +55,20 @@ Rollback should republish known-good assets in a new multipart manifest with a n
 
 ## Reusable Vault publisher workflow
 
-Application repositories should call the reusable workflow after exporting and uploading the approved export artifact. The caller passes only the artifact name, release tuple, and its app-owned signing key. The workflow joins the existing private Tailnet, authenticates to Vault with GitHub OIDC, reads only the R2 access key fields from `secret/data/expo-ota/r2`, downloads the caller artifact, and invokes the pinned Action. It does not inherit all caller secrets; `signing_private_key` remains an explicit app-owned workflow secret.
+Application repositories should call the reusable workflow after exporting and uploading the approved export artifact. The caller passes only the artifact name, release tuple, and its app-owned signing key. The workflow downloads the caller artifact, joins the existing private Tailnet, authenticates to Vault with GitHub OIDC, reads the R2 access key object from `secret/data/expo-ota/r2`, and invokes the pinned Action. It does not inherit all caller secrets; `signing_private_key` remains an explicit app-owned workflow secret.
 
-The Vault role is intentionally restricted to the `byulmaru/kosmo` caller on `refs/heads/main` and this reusable workflow at its reviewed `main` ref. The workflow's Action implementation is pinned independently to the reviewed Action commit.
+The caller must have the non-secret Tailscale variables `TAILSCALE_AUDIENCE` and `TAILSCALE_OAUTH_CLIENT_ID` available from its repository or organization configuration. The reusable workflow uses the verified fixed Vault URL and GitHub OIDC audience `https://vault.tail1fdd55.ts.net`; callers do not configure `VAULT_ADDR` or `VAULT_GITHUB_ACTIONS_AUDIENCE`, and the workflow does not rely on variables from this private Action repository.
+
+Vault provisioning is pending with the infrastructure owner. The `expo-ota-publish` role at the `github-actions` JWT mount must be bound to `repository_owner_id=29172280` and the exact `job_workflow_ref` `byulmaru/expo-ota/.github/workflows/publish.yml@refs/heads/main`, allowing approved callers across the `byulmaru` organization while keeping the publisher workflow pinned to this repository and ref. Its policy must grant read access only to the dedicated KV v2 API path `secret/data/expo-ota/r2`; the workflow selects only the `access_key_id` and `secret_access_key` fields from that object. This Vault trust does not grant access to the private Action repository; the GitHub Actions sharing policy for this private repository is configured separately.
 
 ```yaml
 jobs:
   publish-ota:
     needs: export
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
     uses: byulmaru/expo-ota/.github/workflows/publish.yml@refs/heads/main
     with:
       artifact_name: expo-ota-export
@@ -74,7 +80,7 @@ jobs:
       signing_private_key: ${{ secrets.EXPO_OTA_SIGNING_PRIVATE_KEY }}
 ```
 
-The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source and for passing the app-specific signing key; it does not receive or store the shared R2 credentials.
+The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source and for passing the app-specific signing key; it does not need to configure the shared R2 secrets, which the reusable workflow reads from Vault on its runner at publish time.
 
 ## GitHub Action publisher
 

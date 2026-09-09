@@ -64,17 +64,16 @@ jobs:
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
         with:
           exportEnv: false
-          jwtGithubAudience: ${{ vars.VAULT_GITHUB_ACTIONS_AUDIENCE }}
+          jwtGithubAudience: https://vault.tail1fdd55.ts.net
           method: jwt
           path: github-actions
           role: expo-ota-publish
           secrets: |
             secret/data/expo-ota/r2 access_key_id | R2_ACCESS_KEY_ID ;
             secret/data/expo-ota/r2 secret_access_key | R2_SECRET_ACCESS_KEY
-          url: ${{ vars.VAULT_ADDR }}
+          url: https://vault.tail1fdd55.ts.net
 
       - name: Publish Expo OTA update
-        id: publish
         uses: byulmaru/expo-ota@06558bb4151660c7aca56c87c55457c67329146e
         with:
           channel: ${{ inputs.channel }}
