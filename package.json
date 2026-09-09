@@ -1,7 +1,7 @@
 {
   "name": "expo-ota",
   "version": "0.1.0",
-  "description": "GitHub Action for publishing Expo Updates releases to Cloudflare R2.",
+  "description": "Reusable workflow publisher for Expo Updates releases to Cloudflare R2.",
   "private": true,
   "scripts": {
     "build:action": "esbuild action/src/index.ts --bundle --format=cjs --platform=node --target=node24 --outfile=action/dist/index.cjs",
