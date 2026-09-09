@@ -19,10 +19,10 @@ inputs:
     description: Native runtime version served by this update
     required: true
   public-base-url:
-    description: Public base URL of the Expo OTA Worker
+    description: Public base URL of the static Expo OTA CDN or R2 origin
     required: true
   r2-bucket:
-    description: Cloudflare R2 bucket name
+    description: Cloudflare R2 bucket containing the static manifest and immutable assets
     required: true
   r2-account-id:
     description: Cloudflare account ID used by the R2 S3 endpoint

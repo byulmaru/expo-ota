@@ -48,6 +48,27 @@ async function fixture(): Promise<{ directory: string; privateKey: string; publi
   return { directory, privateKey: privatePem, publicKey: publicPem };
 }
 
+function parseManifestPart(body: Buffer, contentType: string): { headers: Record<string, string>; body: Buffer } {
+  const boundary = /^multipart\/mixed; boundary=([^;]+)$/u.exec(contentType)?.[1];
+  if (!boundary) throw new Error(`unexpected manifest content type: ${contentType}`);
+  const opening = Buffer.from(`--${boundary}\r\n`, "utf8");
+  if (!body.subarray(0, opening.length).equals(opening)) throw new Error("manifest multipart opening boundary is invalid");
+  const headerEnd = body.indexOf(Buffer.from("\r\n\r\n", "utf8"), opening.length);
+  const bodyEnd = body.indexOf(Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"), headerEnd + 4);
+  if (headerEnd < 0 || bodyEnd < 0) throw new Error("manifest multipart delimiters are invalid");
+  const headers = Object.fromEntries(
+    body
+      .subarray(opening.length, headerEnd)
+      .toString("utf8")
+      .split("\r\n")
+      .map((line) => {
+        const separator = line.indexOf(":");
+        return [line.slice(0, separator).toLowerCase(), line.slice(separator + 1).trim()];
+      }),
+  );
+  return { headers, body: body.subarray(headerEnd + 4, bodyEnd) };
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -56,21 +77,29 @@ describe("Expo OTA publish action", () => {
   it("builds tuple-scoped manifest bytes and signs those exact bytes", async () => {
     const fixtureData = await fixture();
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
-    const manifest = JSON.parse(release.manifestBody.toString("utf8")) as Record<string, unknown>;
+    const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
+    const manifest = JSON.parse(manifestPart.body.toString("utf8")) as Record<string, unknown>;
     expect(manifest.runtimeVersion).toBe("fingerprint test");
     expect(manifest.id).toBe(release.updateId);
     expect(manifest.launchAsset).toMatchObject({ contentType: "application/javascript" });
-    expect((manifest.launchAsset as { url: string }).url).toContain("runtimes/fingerprint%20test/assets/");
+    const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
+    expect((manifest.launchAsset as { url: string }).url).toBe(
+      `https://ota.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${launchHash}`,
+    );
+    expect((manifest.launchAsset as { url: string }).url).not.toContain("/v1/projects/");
     expect(release.assets).toHaveLength(2);
     expect(release.manifestUrl).toBe(
-      "https://ota.example.test/v1/projects/kosmo-native/platforms/ios/channels/staging/runtimes/fingerprint%20test/manifest",
+      "https://ota.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
     );
-    expect(release.signature).toMatch(/^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u);
-    const encodedSignature = /^sig="([^"]+)"/u.exec(release.signature)?.[1];
+    expect(manifestPart.headers["content-disposition"]).toBe('form-data; name="manifest"');
+    expect(manifestPart.headers["content-type"]).toBe("application/json");
+    const signature = manifestPart.headers["expo-signature"];
+    expect(signature).toMatch(/^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u);
+    const encodedSignature = /^sig="([^"]+)"/u.exec(signature)?.[1];
     expect(encodedSignature).toBeTruthy();
-    expect(verify("RSA-SHA256", release.manifestBody, fixtureData.publicKey, Buffer.from(encodedSignature!, "base64"))).toBe(true);
+    expect(verify("RSA-SHA256", manifestPart.body, fixtureData.publicKey, Buffer.from(encodedSignature!, "base64"))).toBe(true);
     expect(
-      verify("RSA-SHA256", Buffer.concat([release.manifestBody, Buffer.from("tampered")]), fixtureData.publicKey, Buffer.from(encodedSignature!, "base64")),
+      verify("RSA-SHA256", Buffer.concat([manifestPart.body, Buffer.from("tampered")]), fixtureData.publicKey, Buffer.from(encodedSignature!, "base64")),
     ).toBe(false);
     expect((manifest.launchAsset as { hash: string }).hash).toBe(
       createHash("sha256").update("bundle bytes").digest("base64url"),
@@ -120,18 +149,27 @@ describe("Expo OTA publish action", () => {
       project: "another native",
     });
     expect(release.manifestUrl).toBe(
-      "https://ota.example.test/v1/projects/another%20native/platforms/ios/channels/staging/runtimes/fingerprint%20test/manifest",
+      "https://ota.example.test/releases/another%20native/ios/staging/fingerprint%20test/manifest.json",
     );
     expect(release.manifestKey).toBe(
       "releases/another native/ios/staging/fingerprint test/manifest.json",
     );
     expect(release.assets.every((asset) => asset.key.startsWith("releases/another native/"))).toBe(true);
-    const manifest = JSON.parse(release.manifestBody.toString("utf8")) as {
+    const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
+    const manifest = JSON.parse(manifestPart.body.toString("utf8")) as {
       launchAsset: { url: string };
       assets: Array<{ url: string }>;
     };
-    expect(manifest.launchAsset.url).toContain("/projects/another%20native/");
-    expect(manifest.assets[0]?.url).toContain("/projects/another%20native/");
+    const launchKey = release.assets[0]?.key;
+    expect(launchKey).toBe("releases/another native/ios/staging/fingerprint test/assets/" + release.assets[0]?.sha256Hex);
+    expect(manifest.launchAsset.url).toBe(
+      `https://ota.example.test/${launchKey!.split("/").map(encodeURIComponent).join("/")}`,
+    );
+    const assetKey = release.assets[1]?.key;
+    expect(manifest.assets[0]?.url).toBe(
+      `https://ota.example.test/${assetKey!.split("/").map(encodeURIComponent).join("/")}`,
+    );
+    expect(manifest.assets[0]?.url).not.toContain("/v1/projects/");
   });
 
   it("rejects an unsafe project before writing to R2", async () => {
@@ -163,7 +201,8 @@ describe("Expo OTA publish action", () => {
       }),
     );
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
-    const manifest = JSON.parse(release.manifestBody.toString("utf8")) as {
+    const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
+    const manifest = JSON.parse(manifestPart.body.toString("utf8")) as {
       assets: Array<{ contentType: string }>;
     };
     expect(manifest.assets[0]?.contentType).toBe("application/octet-stream");
@@ -171,48 +210,67 @@ describe("Expo OTA publish action", () => {
 
   it("uploads immutable assets before replacing and verifying the fixed manifest", async () => {
     const fixtureData = await fixture();
-    const storage = new Map<string, { body: Buffer; contentType: string; metadata?: Record<string, string> }>();
+    const storage = new Map<string, {
+      body: Buffer;
+      contentType: string;
+      cacheControl?: string;
+    }>();
     const events: string[] = [];
+    const manifestObjectKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
+    const assetObjectPrefix = "releases/kosmo-native/ios/staging/fingerprint test/assets/";
     let corruptAssetReads = false;
     const fakeClient: S3Transport = {
       async send(command) {
         const input = command.input;
+        const bucket = String(input.Bucket);
         const key = String(input.Key);
+        const storageKey = `${bucket}:${key}`;
         if (input.Body !== undefined) {
-          if (input.IfNoneMatch === "*" && storage.has(key)) {
+          if (input.IfNoneMatch === "*" && storage.has(storageKey)) {
             throw { name: "PreconditionFailed", $metadata: { httpStatusCode: 412 } };
           }
           const body = Buffer.isBuffer(input.Body) ? input.Body : Buffer.from(String(input.Body));
-          storage.set(key, {
+          storage.set(storageKey, {
             body,
             contentType: String(input.ContentType),
-            metadata: input.Metadata as Record<string, string> | undefined,
+            cacheControl: input.CacheControl as string | undefined,
           });
-          events.push(`put:${key}`);
+          events.push(`put:${bucket}:${key}`);
           return {};
         }
-        const object = storage.get(key);
-        if (!object) throw new Error(`missing ${key}`);
+        const object = storage.get(storageKey);
+        if (!object) throw new Error(`missing ${bucket}:${key}`);
         const body = corruptAssetReads && key.includes("/assets/") ? Buffer.alloc(object.body.length, 0x78) : object.body;
-        events.push(`get:${key}`);
+        events.push(`get:${bucket}:${key}`);
         return {
           ContentLength: body.length,
           ContentType: object.contentType,
-          Metadata: object.metadata,
+          CacheControl: object.cacheControl,
           Body: Readable.from([body]),
         };
       },
     };
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey);
     const first = await publishRelease(actionInputs, fakeClient);
-    const firstManifest = storage.get("releases/kosmo-native/ios/staging/fingerprint test/manifest.json");
-    expect(firstManifest?.metadata?.signature).toBeTruthy();
-    const firstAssetPuts = events.filter((event) => event.startsWith("put:releases/kosmo-native/ios/staging/fingerprint test/assets/"));
+    const firstManifest = storage.get(`releases:${manifestObjectKey}`);
+    expect(firstManifest?.cacheControl).toBe("private, no-store");
+    expect(firstManifest?.contentType).toMatch(/^multipart\/mixed; boundary=/u);
+    const storedManifestPart = firstManifest
+      ? parseManifestPart(firstManifest.body, firstManifest.contentType)
+      : undefined;
+    expect(storedManifestPart?.headers["expo-signature"]).toMatch(
+      /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
+    );
+    const firstAssetPuts = events.filter((event) => event.startsWith(`put:releases:${assetObjectPrefix}`));
     expect(firstAssetPuts).toHaveLength(2);
-    const firstManifestPut = events.findIndex((event) => event.startsWith("put:releases/kosmo-native/ios/staging/fingerprint test/manifest"));
+    const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`releases:${assetObjectPrefix}`));
+    expect(assetObjects).toHaveLength(2);
+    expect(assetObjects.every(([, object]) => object.cacheControl === "public, max-age=31536000, immutable")).toBe(true);
+    expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["releases"]));
+    const firstManifestPut = events.findIndex((event) => event === `put:releases:${manifestObjectKey}`);
     const lastAssetRead = Math.max(
       ...events
-        .map((event, index) => (event.startsWith("get:releases/kosmo-native/ios/staging/fingerprint test/assets/") ? index : -1))
+        .map((event, index) => (event.startsWith(`get:releases:${assetObjectPrefix}`) ? index : -1))
         .filter((index) => index >= 0),
     );
     expect(firstManifestPut).toBeGreaterThan(lastAssetRead);
@@ -220,12 +278,16 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     const second = await publishRelease(actionInputs, fakeClient);
     expect(second.updateId).not.toBe(first.updateId);
-    expect(events.filter((event) => event.startsWith("put:releases/kosmo-native/ios/staging/fingerprint test/assets/"))).toHaveLength(0);
-    expect(storage.get("releases/kosmo-native/ios/staging/fingerprint test/manifest.json")?.metadata?.signature).toBeTruthy();
+    expect(events.filter((event) => event.startsWith(`put:releases:${assetObjectPrefix}`))).toHaveLength(0);
+    const secondManifest = storage.get(`releases:${manifestObjectKey}`);
+    expect(secondManifest).toBeDefined();
+    expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
+      /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
+    );
 
     events.length = 0;
     corruptAssetReads = true;
     await expect(publishRelease(actionInputs, fakeClient)).rejects.toThrow("R2 object body verification failed");
-    expect(events.some((event) => event.startsWith("put:releases/kosmo-native/ios/staging/fingerprint test/manifest"))).toBe(false);
+    expect(events.some((event) => event === `put:releases:${manifestObjectKey}`)).toBe(false);
   });
 });

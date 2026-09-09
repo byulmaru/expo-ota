@@ -50435,7 +50435,7 @@ function hashObject(body) {
     md5Hex: md5.toString("hex")
   };
 }
-async function prepareFile(exportRoot, metadataPath, metadataExtension, assetBaseUrl, prefix, contentType) {
+async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrlPrefix, prefix, contentType) {
   const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await (0, import_promises3.readFile)(filePath);
   const hashes = hashObject(body);
@@ -50453,14 +50453,19 @@ async function prepareFile(exportRoot, metadataPath, metadataExtension, assetBas
     contentType,
     ...hashes,
     fileExtension,
-    url: `${assetBaseUrl}/${hashes.sha256Hex}`
+    url: `${assetUrlPrefix}/${hashes.sha256Hex}`
   };
 }
 async function prepareRelease(input2) {
   const validatedInput = parseActionInputs(input2);
-  const baseUrl = validatedInput.publicBaseUrl;
-  const publicTupleUrl = `${baseUrl}/v1/projects/${encodeURIComponent(validatedInput.project)}/platforms/${validatedInput.platform}/channels/${validatedInput.channel}/runtimes/${encodeURIComponent(validatedInput.runtimeVersion)}`;
-  const assetBaseUrl = `${publicTupleUrl}/assets`;
+  const publicObjectPath = [
+    "releases",
+    encodeURIComponent(validatedInput.project),
+    encodeURIComponent(validatedInput.platform),
+    encodeURIComponent(validatedInput.channel),
+    encodeURIComponent(validatedInput.runtimeVersion)
+  ].join("/");
+  const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
   const exportRoot = (0, import_node_path6.resolve)(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
@@ -50486,7 +50491,7 @@ async function prepareRelease(input2) {
     exportRoot,
     platformMetadata.data.bundle,
     "",
-    assetBaseUrl,
+    `${publicObjectUrl}/assets`,
     prefix,
     "application/javascript"
   );
@@ -50496,7 +50501,7 @@ async function prepareRelease(input2) {
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension] : "application/octet-stream";
-        return prepareFile(exportRoot, asset.path, asset.ext, assetBaseUrl, prefix, contentType);
+        return prepareFile(exportRoot, asset.path, asset.ext, `${publicObjectUrl}/assets`, prefix, contentType);
       })
     )
   ];
@@ -50541,19 +50546,37 @@ async function prepareRelease(input2) {
     throw new Error('Input "signing-private-key" must be an RSA private key');
   }
   const signature = `sig="${(0, import_node_crypto7.sign)("RSA-SHA256", manifestBody, privateKey).toString("base64")}", keyid="${validatedInput.keyid}", alg="${SIGNING_ALGORITHM}"`;
+  const boundary = `expo-manifest-${(0, import_node_crypto7.randomUUID)()}`;
+  const manifestContentType = `multipart/mixed; boundary=${boundary}`;
+  const manifestUploadBody = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r
+Content-Disposition: form-data; name="manifest"\r
+Content-Type: application/json\r
+expo-signature: ${signature}\r
+\r
+`,
+      "utf8"
+    ),
+    manifestBody,
+    Buffer.from(`\r
+--${boundary}--\r
+`, "utf8")
+  ]);
   return {
     updateId,
-    manifestUrl: `${publicTupleUrl}/manifest`,
+    manifestUrl: `${publicObjectUrl}/manifest.json`,
     manifestKey: `${prefix}/manifest.json`,
-    manifestBody,
-    signature,
+    manifestUploadBody,
+    manifestContentType,
     assets: [...uniqueAssets.values()]
   };
 }
 
 // action/src/publish.ts
-var MANIFEST_CONTENT_TYPE = "application/expo+json";
-async function verifyObject(client, bucket, object2, signature) {
+var ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
+var MANIFEST_CACHE_CONTROL = "private, no-store";
+async function verifyObject(client, bucket, object2, cacheControl) {
   const response = await client.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: object2.key }));
   if (response.ContentLength !== object2.body.byteLength || response.ContentType !== object2.contentType) {
     throw new Error(`R2 object verification failed for ${object2.key}`);
@@ -50561,9 +50584,8 @@ async function verifyObject(client, bucket, object2, signature) {
   if (response.ContentEncoding && response.ContentEncoding.toLowerCase() !== "identity") {
     throw new Error(`R2 object verification found compressed content for ${object2.key}`);
   }
-  const storedSignature = Object.entries(response.Metadata ?? {}).find(([key]) => key.toLowerCase() === "signature")?.[1];
-  if (signature !== void 0 && storedSignature !== signature) {
-    throw new Error(`R2 manifest signature metadata verification failed for ${object2.key}`);
+  if (response.CacheControl !== cacheControl) {
+    throw new Error(`R2 object verification found unexpected cache control for ${object2.key}`);
   }
   if (!response.Body || typeof response.Body !== "object") throw new Error("R2 read-back response had no body");
   const hash2 = (0, import_node_crypto8.createHash)("sha256");
@@ -50596,6 +50618,7 @@ async function publishRelease(input2, client) {
       Body: asset.body,
       ContentType: asset.contentType,
       ContentMD5: asset.md5Base64,
+      CacheControl: ASSET_CACHE_CONTROL,
       IfNoneMatch: "*"
     });
     try {
@@ -50604,26 +50627,26 @@ async function publishRelease(input2, client) {
       const isPreconditionFailure = typeof error52 === "object" && error52 !== null && (error52.name === "PreconditionFailed" || error52.$metadata?.httpStatusCode === 412);
       if (!isPreconditionFailure) throw new Error(`R2 asset upload failed for ${asset.key}`);
     }
-    await verifyObject(transport, validatedInput.r2Bucket, asset);
+    await verifyObject(transport, validatedInput.r2Bucket, asset, ASSET_CACHE_CONTROL);
   }
-  const manifestHashes = hashObject(release2.manifestBody);
+  const manifestHashes = hashObject(release2.manifestUploadBody);
   const manifest = {
     key: release2.manifestKey,
-    body: release2.manifestBody,
-    contentType: MANIFEST_CONTENT_TYPE,
+    body: release2.manifestUploadBody,
+    contentType: release2.manifestContentType,
     ...manifestHashes
   };
   await transport.send(
     new import_client_s3.PutObjectCommand({
       Bucket: validatedInput.r2Bucket,
       Key: release2.manifestKey,
-      Body: release2.manifestBody,
-      ContentType: MANIFEST_CONTENT_TYPE,
+      Body: release2.manifestUploadBody,
+      ContentType: release2.manifestContentType,
       ContentMD5: manifest.md5Base64,
-      Metadata: { signature: release2.signature }
+      CacheControl: MANIFEST_CACHE_CONTROL
     })
   );
-  await verifyObject(transport, validatedInput.r2Bucket, manifest, release2.signature);
+  await verifyObject(transport, validatedInput.r2Bucket, manifest, MANIFEST_CACHE_CONTROL);
   return { updateId: release2.updateId, manifestUrl: release2.manifestUrl };
 }
 

@@ -1,46 +1,57 @@
-# Expo OTA Worker and publish Action
+# Static Expo OTA publish Action
 
-This private repository contains the organization-shared, read-only Cloudflare Worker that serves Expo Updates v1 manifests and immutable assets from the `RELEASES` R2 bucket, plus the reusable GitHub Action that validates, signs, and publishes approved Expo exports to that bucket.
+This private repository contains the reusable GitHub Action that validates, signs, and publishes an approved Expo export as a static `multipart/mixed` manifest and immutable assets in one R2 bucket. The Action does not build the app, serve HTTP requests, or select a native runtime.
 
-The Worker is deliberately a delivery layer. A publisher validates the manifest and every asset reference, signs the exact manifest bytes, and publishes the manifest body and its `signature` custom metadata together to one fixed R2 object. The Worker does not publish releases, hold a private key, verify the signature, parse manifest JSON, traverse asset references, or hash asset bodies. Expo clients remain responsible for cryptographic signature verification.
+The legacy Expo OTA Worker deployment is retained unchanged because the CDN permissions required for the new static host are currently blocked. This repository does not claim that the new static path is already live or that a device has applied one of its releases.
 
-The Action is the publisher. It must receive an already-built, approved export from the calling repository; it does not build the app or select a native runtime. The calling workflow owns the approved commit, environment approval, and concurrency guard for the `(project, platform, channel, runtimeVersion)` tuple. Keep the Action reference pinned to an immutable commit until a reviewed release of this private repository exists; the examples below intentionally use `<ACTION_COMMIT_SHA>` because no `v1` reference exists yet.
+The Action must receive an already-built, approved export from the calling repository. The calling workflow owns the approved commit, environment approval, and concurrency guard for the `(project, platform, channel, runtimeVersion)` tuple. Keep the Action reference pinned to an immutable commit until a reviewed release of this private repository exists; the examples below intentionally use `<ACTION_COMMIT_SHA>` because no `v1` reference exists yet.
 
-## Routes and R2 keys
+## Static object paths and response contract
 
-- `GET /v1/projects/{project}/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/manifest`
-- `GET /v1/projects/{project}/platforms/{ios|android}/channels/{staging|production}/runtimes/{runtime}/assets/{lowercase-sha256-hex}`
+- `GET /releases/{project}/{platform}/{channel}/{runtime}/manifest.json`
+- `GET /releases/{project}/{platform}/{channel}/{runtime}/assets/{lowercase-sha256-hex}`
 
-The route tuple maps directly to these keys:
+The Action writes these prospective static objects; it does not add routes to the legacy Worker. The route tuple maps directly to these keys:
 
 ```text
 releases/{project}/{platform}/{channel}/{runtime}/manifest.json
 releases/{project}/{platform}/{channel}/{runtime}/assets/{lowercase-sha256-hex}
 ```
 
-`project` is a caller-selected, nonempty path segment. The Worker accepts any project value that does not contain `/`, `\`, or control characters and is not `.` or `..`; it does not maintain a project registry or allowlist.
+`project`, `platform`, `channel`, and `runtime` are fixed in each URL. The Action validates `project` and `runtime` as single path segments, and URL path segments are percent-encoded while R2 keys retain their exact input values.
 
-The manifest object must have an Expo manifest content type (`application/expo+json` or `application/json`) and a `signature` custom metadata value in Expo Structured Field Value form:
+The manifest object has a `multipart/mixed; boundary=...` content type. Its first part is the JSON manifest:
 
 ```text
-sig="<canonical-base64>", keyid="main", alg="rsa-v1_5-sha256"
+Content-Disposition: form-data; name="manifest"
+Content-Type: application/json
+expo-signature: sig="<base64>", keyid="main", alg="rsa-v1_5-sha256"
 ```
 
-The publisher should upload the body and metadata in one R2 `put` operation. R2 then exposes the body and metadata from the same object version, so a promoted tuple never requires a pointer read. Asset objects need their content type metadata and are served with long-lived immutable caching. Their content-addressed keys remain available after a later manifest promotion.
+The `expo-signature` value signs exactly the JSON bytes in that part. The signature is not duplicated in custom object metadata. Asset objects use their content-addressed keys and are served with `public, max-age=31536000, immutable`; the manifest uses `private, no-store`.
 
-Publisher storage is uncompressed: manifest and asset objects must be written without `content-encoding` (an explicit `identity` value is accepted). The Worker does not negotiate or decode compressed objects and returns `404` for any other content encoding.
+Publisher storage is uncompressed: manifest and asset objects must be written without `content-encoding` (an explicit `identity` value is accepted). The Action verifies the stored body, content type, cache policy, and bytes after each write.
 
-Manifest requests require `expo-protocol-version: 1`, matching `expo-platform` and `expo-runtime-version` headers, and, when present, an `Accept` value compatible with the stored manifest content type. `expo-expect-signature` is checked against the stored signature's `keyid` and `alg`; the signature itself is verified by the Expo client. Responses reset `expo-manifest-filters` and `expo-server-defined-headers` with empty SFV dictionaries.
+Before a device can consume a static manifest URL, the public host/CDN must route the exact encoded host/path to the matching R2 object and return these top-level response headers:
+
+```text
+expo-protocol-version: 1
+expo-sfv-version: 0
+```
+
+It must preserve the manifest `Content-Type` and multipart bytes, avoid content encoding transformations, and bypass or revalidate caching for the fixed manifest path. Asset paths may use immutable CDN caching. The Action writes the R2 object headers needed for storage, but configuring the public host, response headers, TLS, and cache behavior is an external deployment prerequisite.
+
+The static endpoint is fixed to one project, platform, channel, and runtime tuple and must be consumed by a host that supports the Expo `multipart/mixed` response structure. It does not perform dynamic request-header negotiation or per-request signing-key selection.
 
 ## Publishing and rollback contract
 
-Publisher CI owns the release proof: it must validate the manifest JSON, runtime version, asset hashes and URLs, sign the exact bytes that it uploads, and verify the R2 write before considering a release ready. It should upload assets first and overwrite the fixed manifest object only after those checks pass.
+Publisher CI owns the release proof: it validates the export, hashes every asset, signs the exact JSON bytes embedded in the multipart body, and verifies the R2 write before considering a release ready. It uploads assets first and overwrites the fixed manifest object only after those checks pass.
 
 The channel is part of the asset URL in this contract. Promoting a manifest between `staging` and `production` therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
 
-Rollback should republish known-good assets in a new manifest with a new UUID and a strictly later `createdAt`, sign those exact bytes, and overwrite the fixed tuple object with the new body and matching signature metadata. It does not delete old assets. Copying older bytes only changes what the server selects; an older `createdAt` does not force clients that already applied a newer update to downgrade.
+Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. It does not delete old assets. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
 
-This repository has no production deployment, live R2, or device-application proof. The checks below cover the Worker bundle, publisher Action, and local R2 test harness only.
+The legacy `/v1/...` Worker deployment remains unchanged until the blocked CDN permissions are available. The new `/releases/...` static host, live R2 behavior, CDN cache behavior, and device application still require deployment and production evidence; local checks below do not provide that proof.
 
 ## GitHub Action publisher
 
@@ -68,11 +79,13 @@ Call the private Action from a workflow in the application repository. The calle
 
 ### Inputs and outputs
 
-The required inputs are `export-dir`, `project`, `platform`, `channel`, `runtime-version`, `public-base-url`, `r2-bucket`, `r2-account-id`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. The R2 account ID, access-key ID, and secret access key are publishing credentials, and the signing key is a PEM-encoded RSA private key; provide all of them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional.
+The required inputs are `export-dir`, `project`, `platform`, `channel`, `runtime-version`, `public-base-url`, `r2-bucket`, `r2-account-id`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. `public-base-url` is the static CDN or R2 origin for both the multipart manifest and immutable assets. `r2-bucket` is the single bucket containing the fixed manifest and content-addressed assets. The R2 account ID, access-key ID, and secret access key are publishing credentials, and the signing key is a PEM-encoded RSA private key; provide all of them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional and fixed when the manifest is published.
 
-The Action returns `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest). A successful run means the export was validated, its manifest was signed, assets were uploaded, the fixed manifest object was written with the matching signature metadata, and the published object was read back successfully. It does not mean that a native binary was built or that a device has applied the update.
+The Action returns `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest). A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded, the fixed multipart manifest object was written, and the published object was read back successfully. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
 
 The generated manifest deliberately uses `metadata: {}` and `extra: {}`. It does not populate `extra.expoClient`, so on a remote update `Constants.expoConfig` is `null` in SDK 56. Callers that depend on Expo config through `Constants.expoConfig` are outside this Action's current compatibility contract; they must keep that configuration in the bundle or wait for an explicitly approved public-config artifact extension.
+
+The manifest URL uses `public-base-url` followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Every launch and asset URL uses the same origin followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/assets/{sha256}` key. The Action writes immutable assets with `public, max-age=31536000, immutable` and writes the static multipart manifest with `private, no-store`.
 
 ### Export artifact contract
 
@@ -94,13 +107,9 @@ Build and approval remain caller-owned. For example, the calling workflow can ru
 
 ```sh
 CI=true pnpm install --frozen-lockfile
-CI=true pnpm types
-CI=true pnpm check:types
 CI=true pnpm check:action
-CI=true pnpm test
 CI=true pnpm test:action
-CI=true pnpm check:wrangler
 CI=true pnpm build:action
 ```
 
-`pnpm test` covers the Worker tests; `pnpm test:action` covers the publisher tests, and `pnpm check:action` type-checks its Node 24 source. `pnpm check:wrangler` runs a dry-run Worker bundle validation. `pnpm build:action` creates the packaged Node 24 Action entrypoint at `action/dist/index.cjs`; the generated bundle is required by `action.yml` and must be included in the Action release. Publishing still requires the caller's explicit workflow invocation, protected secrets, and release approval; local development commands do not deploy a Worker or publish a release.
+`pnpm test:action` covers the publisher tests, and `pnpm check:action` type-checks its Node 24 source. `pnpm build:action` creates the packaged Node 24 Action entrypoint at `action/dist/index.cjs`; the generated bundle is required by `action.yml` and must be included in the Action release. Publishing still requires the caller's explicit workflow invocation, protected secrets, static-host configuration, and release approval; local development commands do not deploy the legacy Worker or publish a release.

@@ -20,8 +20,8 @@ export interface PreparedRelease {
   updateId: string;
   manifestUrl: string;
   manifestKey: string;
-  manifestBody: Buffer;
-  signature: string;
+  manifestUploadBody: Buffer;
+  manifestContentType: string;
   assets: PreparedObject[];
 }
 
@@ -111,7 +111,7 @@ async function prepareFile(
   exportRoot: string,
   metadataPath: string,
   metadataExtension: string,
-  assetBaseUrl: string,
+  assetUrlPrefix: string,
   prefix: string,
   contentType: string,
 ): Promise<PreparedObject & { fileExtension?: string; url: string }> {
@@ -132,15 +132,20 @@ async function prepareFile(
     contentType,
     ...hashes,
     fileExtension,
-    url: `${assetBaseUrl}/${hashes.sha256Hex}`,
+    url: `${assetUrlPrefix}/${hashes.sha256Hex}`,
   };
 }
 
 export async function prepareRelease(input: ActionInputs): Promise<PreparedRelease> {
   const validatedInput = parseActionInputs(input);
-  const baseUrl = validatedInput.publicBaseUrl;
-  const publicTupleUrl = `${baseUrl}/v1/projects/${encodeURIComponent(validatedInput.project)}/platforms/${validatedInput.platform}/channels/${validatedInput.channel}/runtimes/${encodeURIComponent(validatedInput.runtimeVersion)}`;
-  const assetBaseUrl = `${publicTupleUrl}/assets`;
+  const publicObjectPath = [
+    "releases",
+    encodeURIComponent(validatedInput.project),
+    encodeURIComponent(validatedInput.platform),
+    encodeURIComponent(validatedInput.channel),
+    encodeURIComponent(validatedInput.runtimeVersion),
+  ].join("/");
+  const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
   const exportRoot = resolve(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
@@ -171,7 +176,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     exportRoot,
     platformMetadata.data.bundle,
     "",
-    assetBaseUrl,
+    `${publicObjectUrl}/assets`,
     prefix,
     "application/javascript",
   );
@@ -181,7 +186,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension]! : "application/octet-stream";
-        return prepareFile(exportRoot, asset.path, asset.ext, assetBaseUrl, prefix, contentType);
+        return prepareFile(exportRoot, asset.path, asset.ext, `${publicObjectUrl}/assets`, prefix, contentType);
       }),
     )),
   ];
@@ -227,12 +232,22 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     throw new Error('Input "signing-private-key" must be an RSA private key');
   }
   const signature = `sig="${sign("RSA-SHA256", manifestBody, privateKey).toString("base64")}", keyid="${validatedInput.keyid}", alg="${SIGNING_ALGORITHM}"`;
+  const boundary = `expo-manifest-${randomUUID()}`;
+  const manifestContentType = `multipart/mixed; boundary=${boundary}`;
+  const manifestUploadBody = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\nContent-Type: application/json\r\nexpo-signature: ${signature}\r\n\r\n`,
+      "utf8",
+    ),
+    manifestBody,
+    Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+  ]);
   return {
     updateId,
-    manifestUrl: `${publicTupleUrl}/manifest`,
+    manifestUrl: `${publicObjectUrl}/manifest.json`,
     manifestKey: `${prefix}/manifest.json`,
-    manifestBody,
-    signature,
+    manifestUploadBody,
+    manifestContentType,
     assets: [...uniqueAssets.values()],
   };
 }
