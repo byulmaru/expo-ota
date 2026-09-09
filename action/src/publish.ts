@@ -9,6 +9,7 @@ import { hashObject, prepareRelease, type PreparedObject } from "./prepare";
 
 const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable" as const;
 const MANIFEST_CACHE_CONTROL = "private, no-store" as const;
+const R2_BUCKET = "expo-ota" as const;
 
 export interface PublishResult {
   updateId: string;
@@ -29,11 +30,10 @@ export interface S3Transport {
 
 async function verifyObject(
   client: S3Transport,
-  bucket: string,
   object: Pick<PreparedObject, "key" | "body" | "contentType" | "sha256Hex">,
   cacheControl: string,
 ): Promise<void> {
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: object.key }));
+  const response = await client.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: object.key }));
   if (response.ContentLength !== object.body.byteLength || response.ContentType !== object.contentType) {
     throw new Error(`R2 object verification failed for ${object.key}`);
   }
@@ -59,7 +59,7 @@ async function verifyObject(
 export async function publishRelease(input: ActionInputs, client?: S3Transport): Promise<PublishResult> {
   const validatedInput = parseActionInputs(input);
   const transport = client ?? new S3Client({
-    endpoint: `https://${validatedInput.r2AccountId}.r2.cloudflarestorage.com`,
+    endpoint: "https://676a2d8e52515abd22c0edda7364cf73.r2.cloudflarestorage.com",
     forcePathStyle: true,
     region: "auto",
     credentials: {
@@ -71,7 +71,7 @@ export async function publishRelease(input: ActionInputs, client?: S3Transport):
 
   for (const asset of release.assets) {
     const command = new PutObjectCommand({
-      Bucket: validatedInput.r2Bucket,
+      Bucket: R2_BUCKET,
       Key: asset.key,
       Body: asset.body,
       ContentType: asset.contentType,
@@ -89,7 +89,7 @@ export async function publishRelease(input: ActionInputs, client?: S3Transport):
           (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata?.httpStatusCode === 412);
       if (!isPreconditionFailure) throw new Error(`R2 asset upload failed for ${asset.key}`);
     }
-    await verifyObject(transport, validatedInput.r2Bucket, asset, ASSET_CACHE_CONTROL);
+    await verifyObject(transport, asset, ASSET_CACHE_CONTROL);
   }
 
   const manifestHashes = hashObject(release.manifestUploadBody);
@@ -101,7 +101,7 @@ export async function publishRelease(input: ActionInputs, client?: S3Transport):
   };
   await transport.send(
     new PutObjectCommand({
-      Bucket: validatedInput.r2Bucket,
+      Bucket: R2_BUCKET,
       Key: release.manifestKey,
       Body: release.manifestUploadBody,
       ContentType: release.manifestContentType,
@@ -109,6 +109,6 @@ export async function publishRelease(input: ActionInputs, client?: S3Transport):
       CacheControl: MANIFEST_CACHE_CONTROL,
     }),
   );
-  await verifyObject(transport, validatedInput.r2Bucket, manifest, MANIFEST_CACHE_CONTROL);
+  await verifyObject(transport, manifest, MANIFEST_CACHE_CONTROL);
   return { updateId: release.updateId, manifestUrl: release.manifestUrl };
 }

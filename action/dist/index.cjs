@@ -50310,14 +50310,6 @@ var actionInputsSchema = external_exports.object({
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
     'Input "runtime-version" must be one non-empty path segment'
   ),
-  publicBaseUrl: external_exports.url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' }).refine((value) => {
-    const url2 = new URL(value);
-    return !(url2.username || url2.password || url2.search || url2.hash);
-  }, 'Input "public-base-url" must not contain credentials, query, or fragment').transform((value) => value.replace(/\/+$/u, "")),
-  r2Bucket: external_exports.string().min(1),
-  r2AccountId: external_exports.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
-    error: 'Input "r2-account-id" contains invalid characters'
-  }),
   r2AccessKeyId: external_exports.string().min(1),
   r2SecretAccessKey: external_exports.string().min(1),
   signingPrivateKey: external_exports.string().min(1),
@@ -50344,9 +50336,6 @@ function readActionInputs() {
     platform: input("platform"),
     channel: input("channel"),
     runtimeVersion: input("runtime-version"),
-    publicBaseUrl: input("public-base-url"),
-    r2Bucket: input("r2-bucket"),
-    r2AccountId: input("r2-account-id"),
     r2AccessKeyId: input("r2-access-key-id"),
     r2SecretAccessKey: input("r2-secret-access-key"),
     signingPrivateKey: input("signing-private-key"),
@@ -50465,7 +50454,7 @@ async function prepareRelease(input2) {
     encodeURIComponent(validatedInput.channel),
     encodeURIComponent(validatedInput.runtimeVersion)
   ].join("/");
-  const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
+  const publicObjectUrl = `https://expo-ota.byulmaru.co/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
   const exportRoot = (0, import_node_path6.resolve)(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
@@ -50576,8 +50565,9 @@ expo-signature: ${signature}\r
 // action/src/publish.ts
 var ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 var MANIFEST_CACHE_CONTROL = "private, no-store";
-async function verifyObject(client, bucket, object2, cacheControl) {
-  const response = await client.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: object2.key }));
+var R2_BUCKET = "expo-ota";
+async function verifyObject(client, object2, cacheControl) {
+  const response = await client.send(new import_client_s3.GetObjectCommand({ Bucket: R2_BUCKET, Key: object2.key }));
   if (response.ContentLength !== object2.body.byteLength || response.ContentType !== object2.contentType) {
     throw new Error(`R2 object verification failed for ${object2.key}`);
   }
@@ -50602,7 +50592,7 @@ async function verifyObject(client, bucket, object2, cacheControl) {
 async function publishRelease(input2, client) {
   const validatedInput = parseActionInputs(input2);
   const transport = client ?? new import_client_s3.S3Client({
-    endpoint: `https://${validatedInput.r2AccountId}.r2.cloudflarestorage.com`,
+    endpoint: "https://676a2d8e52515abd22c0edda7364cf73.r2.cloudflarestorage.com",
     forcePathStyle: true,
     region: "auto",
     credentials: {
@@ -50613,7 +50603,7 @@ async function publishRelease(input2, client) {
   const release2 = await prepareRelease(validatedInput);
   for (const asset of release2.assets) {
     const command5 = new import_client_s3.PutObjectCommand({
-      Bucket: validatedInput.r2Bucket,
+      Bucket: R2_BUCKET,
       Key: asset.key,
       Body: asset.body,
       ContentType: asset.contentType,
@@ -50627,7 +50617,7 @@ async function publishRelease(input2, client) {
       const isPreconditionFailure = typeof error52 === "object" && error52 !== null && (error52.name === "PreconditionFailed" || error52.$metadata?.httpStatusCode === 412);
       if (!isPreconditionFailure) throw new Error(`R2 asset upload failed for ${asset.key}`);
     }
-    await verifyObject(transport, validatedInput.r2Bucket, asset, ASSET_CACHE_CONTROL);
+    await verifyObject(transport, asset, ASSET_CACHE_CONTROL);
   }
   const manifestHashes = hashObject(release2.manifestUploadBody);
   const manifest = {
@@ -50638,7 +50628,7 @@ async function publishRelease(input2, client) {
   };
   await transport.send(
     new import_client_s3.PutObjectCommand({
-      Bucket: validatedInput.r2Bucket,
+      Bucket: R2_BUCKET,
       Key: release2.manifestKey,
       Body: release2.manifestUploadBody,
       ContentType: release2.manifestContentType,
@@ -50646,7 +50636,7 @@ async function publishRelease(input2, client) {
       CacheControl: MANIFEST_CACHE_CONTROL
     })
   );
-  await verifyObject(transport, validatedInput.r2Bucket, manifest, MANIFEST_CACHE_CONTROL);
+  await verifyObject(transport, manifest, MANIFEST_CACHE_CONTROL);
   return { updateId: release2.updateId, manifestUrl: release2.manifestUrl };
 }
 

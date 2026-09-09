@@ -17,9 +17,6 @@ function inputs(exportDir: string, privateKey: string): ActionInputs {
     platform: "ios",
     channel: "staging",
     runtimeVersion: "fingerprint test",
-    publicBaseUrl: "https://ota.example.test/",
-    r2Bucket: "releases",
-    r2AccountId: "account",
     r2AccessKeyId: "access",
     r2SecretAccessKey: "secret",
     signingPrivateKey: privateKey,
@@ -84,12 +81,12 @@ describe("Expo OTA publish action", () => {
     expect(manifest.launchAsset).toMatchObject({ contentType: "application/javascript" });
     const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
     expect((manifest.launchAsset as { url: string }).url).toBe(
-      `https://ota.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${launchHash}`,
+      `https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${launchHash}`,
     );
     expect((manifest.launchAsset as { url: string }).url).not.toContain("/v1/projects/");
     expect(release.assets).toHaveLength(2);
     expect(release.manifestUrl).toBe(
-      "https://ota.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
+      "https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
     );
     expect(manifestPart.headers["content-disposition"]).toBe('form-data; name="manifest"');
     expect(manifestPart.headers["content-type"]).toBe("application/json");
@@ -149,7 +146,7 @@ describe("Expo OTA publish action", () => {
       project: "another native",
     });
     expect(release.manifestUrl).toBe(
-      "https://ota.example.test/releases/another%20native/ios/staging/fingerprint%20test/manifest.json",
+      "https://expo-ota.byulmaru.co/releases/another%20native/ios/staging/fingerprint%20test/manifest.json",
     );
     expect(release.manifestKey).toBe(
       "releases/another native/ios/staging/fingerprint test/manifest.json",
@@ -163,11 +160,11 @@ describe("Expo OTA publish action", () => {
     const launchKey = release.assets[0]?.key;
     expect(launchKey).toBe("releases/another native/ios/staging/fingerprint test/assets/" + release.assets[0]?.sha256Hex);
     expect(manifest.launchAsset.url).toBe(
-      `https://ota.example.test/${launchKey!.split("/").map(encodeURIComponent).join("/")}`,
+      `https://expo-ota.byulmaru.co/${launchKey!.split("/").map(encodeURIComponent).join("/")}`,
     );
     const assetKey = release.assets[1]?.key;
     expect(manifest.assets[0]?.url).toBe(
-      `https://ota.example.test/${assetKey!.split("/").map(encodeURIComponent).join("/")}`,
+      `https://expo-ota.byulmaru.co/${assetKey!.split("/").map(encodeURIComponent).join("/")}`,
     );
     expect(manifest.assets[0]?.url).not.toContain("/v1/projects/");
   });
@@ -252,7 +249,7 @@ describe("Expo OTA publish action", () => {
     };
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey);
     const first = await publishRelease(actionInputs, fakeClient);
-    const firstManifest = storage.get(`releases:${manifestObjectKey}`);
+    const firstManifest = storage.get(`expo-ota:${manifestObjectKey}`);
     expect(firstManifest?.cacheControl).toBe("private, no-store");
     expect(firstManifest?.contentType).toMatch(/^multipart\/mixed; boundary=/u);
     const storedManifestPart = firstManifest
@@ -261,16 +258,16 @@ describe("Expo OTA publish action", () => {
     expect(storedManifestPart?.headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
     );
-    const firstAssetPuts = events.filter((event) => event.startsWith(`put:releases:${assetObjectPrefix}`));
+    const firstAssetPuts = events.filter((event) => event.startsWith(`put:expo-ota:${assetObjectPrefix}`));
     expect(firstAssetPuts).toHaveLength(2);
-    const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`releases:${assetObjectPrefix}`));
+    const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`expo-ota:${assetObjectPrefix}`));
     expect(assetObjects).toHaveLength(2);
     expect(assetObjects.every(([, object]) => object.cacheControl === "public, max-age=31536000, immutable")).toBe(true);
-    expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["releases"]));
-    const firstManifestPut = events.findIndex((event) => event === `put:releases:${manifestObjectKey}`);
+    expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["expo-ota"]));
+    const firstManifestPut = events.findIndex((event) => event === `put:expo-ota:${manifestObjectKey}`);
     const lastAssetRead = Math.max(
       ...events
-        .map((event, index) => (event.startsWith(`get:releases:${assetObjectPrefix}`) ? index : -1))
+        .map((event, index) => (event.startsWith(`get:expo-ota:${assetObjectPrefix}`) ? index : -1))
         .filter((index) => index >= 0),
     );
     expect(firstManifestPut).toBeGreaterThan(lastAssetRead);
@@ -278,8 +275,8 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     const second = await publishRelease(actionInputs, fakeClient);
     expect(second.updateId).not.toBe(first.updateId);
-    expect(events.filter((event) => event.startsWith(`put:releases:${assetObjectPrefix}`))).toHaveLength(0);
-    const secondManifest = storage.get(`releases:${manifestObjectKey}`);
+    expect(events.filter((event) => event.startsWith(`put:expo-ota:${assetObjectPrefix}`))).toHaveLength(0);
+    const secondManifest = storage.get(`expo-ota:${manifestObjectKey}`);
     expect(secondManifest).toBeDefined();
     expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
@@ -288,6 +285,6 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     corruptAssetReads = true;
     await expect(publishRelease(actionInputs, fakeClient)).rejects.toThrow("R2 object body verification failed");
-    expect(events.some((event) => event === `put:releases:${manifestObjectKey}`)).toBe(false);
+    expect(events.some((event) => event === `put:expo-ota:${manifestObjectKey}`)).toBe(false);
   });
 });

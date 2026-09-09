@@ -145,7 +145,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     encodeURIComponent(validatedInput.channel),
     encodeURIComponent(validatedInput.runtimeVersion),
   ].join("/");
-  const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
+  const publicObjectUrl = `https://expo-ota.byulmaru.co/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
   const exportRoot = resolve(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
