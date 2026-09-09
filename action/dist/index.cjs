@@ -1305,7 +1305,7 @@ var init_ListSchema = __esm({
 });
 
 // node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/schema/schemas/MapSchema.js
-var MapSchema, map;
+var MapSchema, map2;
 var init_MapSchema = __esm({
   "node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/schema/schemas/MapSchema.js"() {
     init_Schema();
@@ -1315,7 +1315,7 @@ var init_MapSchema = __esm({
       valueSchema;
       symbol = _MapSchema.symbol;
     };
-    map = (namespace, name, traits, keySchema, valueSchema) => Schema.assign(new MapSchema(), {
+    map2 = (namespace, name, traits, keySchema, valueSchema) => Schema.assign(new MapSchema(), {
       name,
       namespace,
       traits,
@@ -1368,7 +1368,7 @@ var init_StructureSchema = __esm({
 });
 
 // node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/schema/schemas/ErrorSchema.js
-var ErrorSchema, error;
+var ErrorSchema, error51;
 var init_ErrorSchema = __esm({
   "node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/schema/schemas/ErrorSchema.js"() {
     init_Schema();
@@ -1378,7 +1378,7 @@ var init_ErrorSchema = __esm({
       ctor;
       symbol = _ErrorSchema.symbol;
     };
-    error = (namespace, name, traits, memberNames, memberList, _ctor) => Schema.assign(new ErrorSchema(), {
+    error51 = (namespace, name, traits, memberNames, memberList, _ctor) => Schema.assign(new ErrorSchema(), {
       name,
       namespace,
       traits,
@@ -1882,11 +1882,11 @@ __export(schema_exports, {
   TypeRegistry: () => TypeRegistry,
   deref: () => deref,
   deserializerMiddlewareOption: () => deserializerMiddlewareOption,
-  error: () => error,
+  error: () => error51,
   getSchemaSerdePlugin: () => getSchemaSerdePlugin,
   isStaticSchema: () => isStaticSchema,
   list: () => list,
-  map: () => map,
+  map: () => map2,
   op: () => op,
   operation: () => operation,
   serializerMiddlewareOption: () => serializerMiddlewareOption,
@@ -2436,7 +2436,7 @@ var init_NoOpLogger = __esm({
 });
 
 // node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/client/smithy-client/object-mapping.js
-function map2(arg0, arg1, arg2) {
+function map3(arg0, arg1, arg2) {
   let target;
   let filter;
   let instructions;
@@ -2485,7 +2485,7 @@ var init_object_mapping = __esm({
       return out;
     };
     mapWithFilter = (target, filter, instructions) => {
-      return map2(target, Object.entries(instructions).reduce((_instructions, [key, value]) => {
+      return map3(target, Object.entries(instructions).reduce((_instructions, [key, value]) => {
         if (Array.isArray(value)) {
           _instructions[key] = value;
         } else {
@@ -2630,7 +2630,7 @@ __export(client_exports, {
   isSerializableHeaderValue: () => isSerializableHeaderValue,
   loadConfigsForDefaultMode: () => loadConfigsForDefaultMode,
   makeBuilder: () => makeBuilder,
-  map: () => map2,
+  map: () => map3,
   normalizeProvider: () => normalizeProvider,
   resolveChecksumRuntimeConfig: () => resolveChecksumRuntimeConfig,
   resolveDefaultRuntimeConfig: () => resolveDefaultRuntimeConfig,
@@ -3309,18 +3309,18 @@ function range(v, min, max) {
     throw new Error(`Value ${_v} out of range [${min}, ${max}]`);
   }
 }
-var ddd, mmm, time, date, year, RFC3339_WITH_OFFSET2, IMF_FIXDATE2, RFC_850_DATE2, ASC_TIME2, months, _parseEpochTimestamp, _parseRfc3339DateTimeWithOffset, _parseRfc7231DateTime;
+var ddd, mmm, time3, date5, year, RFC3339_WITH_OFFSET2, IMF_FIXDATE2, RFC_850_DATE2, ASC_TIME2, months, _parseEpochTimestamp, _parseRfc3339DateTimeWithOffset, _parseRfc7231DateTime;
 var init_schema_date_utils = __esm({
   "node_modules/.pnpm/@smithy+core@3.33.3/node_modules/@smithy/core/dist-es/submodules/serde/schema-serde-lib/schema-date-utils.js"() {
     ddd = `(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:[ne|u?r]?s?day)?`;
     mmm = `(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)`;
-    time = `(\\d?\\d):(\\d{2}):(\\d{2})(?:\\.(\\d+))?`;
-    date = `(\\d?\\d)`;
+    time3 = `(\\d?\\d):(\\d{2}):(\\d{2})(?:\\.(\\d+))?`;
+    date5 = `(\\d?\\d)`;
     year = `(\\d{4})`;
     RFC3339_WITH_OFFSET2 = new RegExp(/^(\d{4})-(\d\d)-(\d\d)[tT](\d\d):(\d\d):(\d\d)(\.(\d+))?(([-+]\d\d:\d\d)|[zZ])$/);
-    IMF_FIXDATE2 = new RegExp(`^${ddd}, ${date} ${mmm} ${year} ${time} GMT$`);
-    RFC_850_DATE2 = new RegExp(`^${ddd}, ${date}-${mmm}-(\\d\\d) ${time} GMT$`);
-    ASC_TIME2 = new RegExp(`^${ddd} ${mmm} ( [1-9]|\\d\\d) ${time} ${year}$`);
+    IMF_FIXDATE2 = new RegExp(`^${ddd}, ${date5} ${mmm} ${year} ${time3} GMT$`);
+    RFC_850_DATE2 = new RegExp(`^${ddd}, ${date5}-${mmm}-(\\d\\d) ${time3} GMT$`);
+    ASC_TIME2 = new RegExp(`^${ddd} ${mmm} ( [1-9]|\\d\\d) ${time3} ${year}$`);
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     _parseEpochTimestamp = (value) => {
       if (value == null) {
@@ -6453,7 +6453,7 @@ function createBufferedReadableStream(upstream, size, logger2) {
       if (chunkSize >= size && bufferSize === 0) {
         controller.enqueue(chunk);
       } else {
-        const newSize = merge(buffers, mode, chunk);
+        const newSize = merge2(buffers, mode, chunk);
         if (!streamBufferingLoggedWarning && bytesSeen > size * 2) {
           streamBufferingLoggedWarning = true;
           logger2?.warn(`@smithy/util-stream - stream chunk size ${chunkSize} is below threshold of ${size}, automatically buffering.`);
@@ -6470,7 +6470,7 @@ function createBufferedReadableStream(upstream, size, logger2) {
     pull
   });
 }
-function merge(buffers, mode, chunk) {
+function merge2(buffers, mode, chunk) {
   switch (mode) {
     case 0:
       buffers[0] += chunk;
@@ -6547,7 +6547,7 @@ function createBufferedReadable(upstream, size, logger2) {
     if (chunkSize >= size && bufferSize === 0) {
       downstream.push(chunk);
     } else {
-      const newSize = merge(buffers, mode, chunk);
+      const newSize = merge2(buffers, mode, chunk);
       if (!streamBufferingLoggedWarning && bytesSeen > size * 2) {
         streamBufferingLoggedWarning = true;
         logger2?.warn(`@smithy/util-stream - stream chunk size ${chunkSize} is below threshold of ${size}, automatically buffering.`);
@@ -15532,11 +15532,11 @@ var init_throw_200_exceptions = __esm({
 });
 
 // node_modules/.pnpm/@aws-sdk+core@3.977.9/node_modules/@aws-sdk/core/dist-es/submodules/util/util-arn-parser/arn.js
-var validate, parse;
+var validate, parse3;
 var init_arn = __esm({
   "node_modules/.pnpm/@aws-sdk+core@3.977.9/node_modules/@aws-sdk/core/dist-es/submodules/util/util-arn-parser/arn.js"() {
     validate = (str) => typeof str === "string" && str.indexOf("arn:") === 0 && str.split(":").length >= 6;
-    parse = (arn) => {
+    parse3 = (arn) => {
       const segments = arn.split(":");
       if (segments.length < 6 || segments[0] !== "arn")
         throw new Error("Malformed ARN");
@@ -15969,13 +15969,13 @@ function needsReviver(schema) {
     if (REVIVER_SYMBOL in raw) {
       return raw[REVIVER_SYMBOL];
     }
-    const result = _check(ns, /* @__PURE__ */ new Set());
+    const result = _check2(ns, /* @__PURE__ */ new Set());
     raw[REVIVER_SYMBOL] = result;
     return result;
   }
-  return _check(ns, /* @__PURE__ */ new Set());
+  return _check2(ns, /* @__PURE__ */ new Set());
 }
-function _check(ns, seen) {
+function _check2(ns, seen) {
   const raw = ns.getSchema();
   if (seen.has(raw)) {
     return false;
@@ -15986,12 +15986,12 @@ function _check(ns, seen) {
   }
   if (ns.isStructSchema()) {
     for (const [, memberSchema] of ns.structIterator()) {
-      if (_check(memberSchema, seen)) {
+      if (_check2(memberSchema, seen)) {
         return true;
       }
     }
   } else if (ns.isListSchema() || ns.isMapSchema()) {
-    if (_check(ns.getValueSchema(), seen)) {
+    if (_check2(ns.getValueSchema(), seen)) {
       return true;
     }
   } else if (ns.isDocumentSchema()) {
@@ -18617,7 +18617,7 @@ var init_bucketEndpointMiddleware = __esm({
         if (options.bucketEndpoint) {
           request.hostname = bucketName;
         } else if (validate(bucketName)) {
-          const bucketArn = parse(bucketName);
+          const bucketArn = parse3(bucketName);
           const clientRegion = await options.region();
           const useDualstackEndpoint = await options.useDualstackEndpoint();
           const useFipsEndpoint = await options.useFipsEndpoint();
@@ -23298,7 +23298,7 @@ var init_errors3 = __esm({
 });
 
 // node_modules/.pnpm/@aws-sdk+nested-clients@3.997.44/node_modules/@aws-sdk/nested-clients/dist-es/submodules/sts/schemas/schemas_0.js
-var _A, _AKI, _AR, _ARI, _ARR, _ARRs, _ARU, _ARWWI, _ARWWIR, _ARWWIRs, _Au, _C, _CA, _DS, _E, _EI, _ETE2, _IDPCEE, _IDPRCE, _IITE, _K, _MPDE, _P, _PA, _PAr, _PC, _PCLT, _PCr, _PDT, _PI, _PPS, _PPTLE, _Pr, _RA, _RDE, _RSN, _SAK, _SFWIT, _SI, _SN, _ST, _T, _TC, _TTK, _Ta, _V, _WIT, _a, _aKST, _aQE, _c3, _cTT, _e3, _hE3, _m2, _pDLT, _s3, _tLT, n03, _s_registry3, STSServiceException$, n0_registry3, ExpiredTokenException$2, IDPCommunicationErrorException$, IDPRejectedClaimException$, InvalidIdentityTokenException$, MalformedPolicyDocumentException$, PackedPolicyTooLargeException$, RegionDisabledException$, errorTypeRegistries3, accessKeySecretType, clientTokenType, AssumedRoleUser$, AssumeRoleRequest$, AssumeRoleResponse$, AssumeRoleWithWebIdentityRequest$, AssumeRoleWithWebIdentityResponse$, Credentials$, PolicyDescriptorType$, ProvidedContext$, Tag$, policyDescriptorListType, ProvidedContextsListType, tagKeyListType, tagListType, AssumeRole$, AssumeRoleWithWebIdentity$;
+var _A, _AKI, _AR, _ARI, _ARR, _ARRs, _ARU, _ARWWI, _ARWWIR, _ARWWIRs, _Au, _C, _CA, _DS, _E, _EI, _ETE2, _IDPCEE, _IDPRCE, _IITE, _K, _MPDE, _P, _PA, _PAr, _PC, _PCLT, _PCr, _PDT, _PI, _PPS, _PPTLE, _Pr, _RA, _RDE, _RSN, _SAK, _SFWIT, _SI, _SN, _ST, _T, _TC, _TTK, _Ta, _V, _WIT, _a3, _aKST, _aQE, _c3, _cTT, _e3, _hE3, _m2, _pDLT, _s3, _tLT, n03, _s_registry3, STSServiceException$, n0_registry3, ExpiredTokenException$2, IDPCommunicationErrorException$, IDPRejectedClaimException$, InvalidIdentityTokenException$, MalformedPolicyDocumentException$, PackedPolicyTooLargeException$, RegionDisabledException$, errorTypeRegistries3, accessKeySecretType, clientTokenType, AssumedRoleUser$, AssumeRoleRequest$, AssumeRoleResponse$, AssumeRoleWithWebIdentityRequest$, AssumeRoleWithWebIdentityResponse$, Credentials$, PolicyDescriptorType$, ProvidedContext$, Tag$, policyDescriptorListType, ProvidedContextsListType, tagKeyListType, tagListType, AssumeRole$, AssumeRoleWithWebIdentity$;
 var init_schemas_03 = __esm({
   "node_modules/.pnpm/@aws-sdk+nested-clients@3.997.44/node_modules/@aws-sdk/nested-clients/dist-es/submodules/sts/schemas/schemas_0.js"() {
     init_schema();
@@ -23351,7 +23351,7 @@ var init_schemas_03 = __esm({
     _Ta = "Tag";
     _V = "Value";
     _WIT = "WebIdentityToken";
-    _a = "arn";
+    _a3 = "arn";
     _aKST = "accessKeySecretType";
     _aQE = "awsQueryError";
     _c3 = "client";
@@ -23493,7 +23493,7 @@ var init_schemas_03 = __esm({
       n03,
       _PDT,
       0,
-      [_a],
+      [_a3],
       [0]
     ];
     ProvidedContext$ = [
@@ -24435,7 +24435,7 @@ var init_errors4 = __esm({
 });
 
 // node_modules/.pnpm/@aws-sdk+nested-clients@3.997.44/node_modules/@aws-sdk/nested-clients/dist-es/submodules/signin/schemas/schemas_0.js
-var _ADE2, _AT2, _COAT, _COATR, _COATRB, _COATRBr, _COATRr, _COATWIAM, _COATWIAMR, _COATWIAMRr, _ISE2, _OAAT, _RT2, _TMRE2, _VE, _aKI2, _aT3, _at, _c4, _cI2, _cV2, _co2, _e4, _eI2, _ei, _gT2, _gt, _h3, _hE4, _iT2, _jN, _m3, _r2, _rT2, _rU2, _s4, _sAK2, _sT2, _se2, _tI, _tO, _tT2, _tt, n04, _s_registry4, SigninServiceException$, n0_registry4, AccessDeniedException$2, InternalServerException$2, TooManyRequestsError$, ValidationException$, errorTypeRegistries4, OAuthAccessToken, RefreshToken2, AccessToken$, CreateOAuth2TokenRequest$, CreateOAuth2TokenRequestBody$, CreateOAuth2TokenResponse$, CreateOAuth2TokenResponseBody$, CreateOAuth2TokenWithIAMRequest$, CreateOAuth2TokenWithIAMResponse$, CreateOAuth2Token$, CreateOAuth2TokenWithIAM$;
+var _ADE2, _AT2, _COAT, _COATR, _COATRB, _COATRBr, _COATRr, _COATWIAM, _COATWIAMR, _COATWIAMRr, _ISE2, _OAAT, _RT2, _TMRE2, _VE, _aKI2, _aT3, _at, _c4, _cI2, _cV2, _co2, _e4, _eI2, _ei, _gT2, _gt2, _h3, _hE4, _iT2, _jN, _m3, _r2, _rT2, _rU2, _s4, _sAK2, _sT2, _se2, _tI, _tO, _tT2, _tt, n04, _s_registry4, SigninServiceException$, n0_registry4, AccessDeniedException$2, InternalServerException$2, TooManyRequestsError$, ValidationException$, errorTypeRegistries4, OAuthAccessToken, RefreshToken2, AccessToken$, CreateOAuth2TokenRequest$, CreateOAuth2TokenRequestBody$, CreateOAuth2TokenResponse$, CreateOAuth2TokenResponseBody$, CreateOAuth2TokenWithIAMRequest$, CreateOAuth2TokenWithIAMResponse$, CreateOAuth2Token$, CreateOAuth2TokenWithIAM$;
 var init_schemas_04 = __esm({
   "node_modules/.pnpm/@aws-sdk+nested-clients@3.997.44/node_modules/@aws-sdk/nested-clients/dist-es/submodules/signin/schemas/schemas_0.js"() {
     init_schema();
@@ -24467,7 +24467,7 @@ var init_schemas_04 = __esm({
     _eI2 = "expiresIn";
     _ei = "expires_in";
     _gT2 = "grantType";
-    _gt = "grant_type";
+    _gt2 = "grant_type";
     _h3 = "http";
     _hE4 = "httpError";
     _iT2 = "idToken";
@@ -24586,7 +24586,7 @@ var init_schemas_04 = __esm({
       _COATWIAMR,
       0,
       [_gT2, _r2],
-      [[0, { [_jN]: _gt }], 0],
+      [[0, { [_jN]: _gt2 }], 0],
       2
     ];
     CreateOAuth2TokenWithIAMResponse$ = [
@@ -24971,7 +24971,7 @@ var require_dist_cjs11 = __commonJS({
     var { setCredentialFeature: setCredentialFeature2 } = (init_client3(), __toCommonJS(client_exports2));
     var { CredentialsProviderError: CredentialsProviderError2, parseKnownFiles: parseKnownFiles2, getProfileName: getProfileName2 } = (init_config2(), __toCommonJS(config_exports));
     var { HttpRequest: HttpRequest2 } = (init_protocols(), __toCommonJS(protocols_exports));
-    var { createHash: createHash7, createPrivateKey: createPrivateKey2, createPublicKey, sign: sign4 } = require("node:crypto");
+    var { createHash: createHash8, createPrivateKey: createPrivateKey2, createPublicKey, sign: sign4 } = require("node:crypto");
     var { promises } = require("node:fs");
     var { homedir: homedir2 } = require("node:os");
     var { dirname, join: join5 } = require("node:path");
@@ -25140,7 +25140,7 @@ var require_dist_cjs11 = __commonJS({
       getTokenFilePath() {
         const directory = process.env.AWS_LOGIN_CACHE_DIRECTORY ?? join5(homedir2(), ".aws", "login", "cache");
         const loginSessionBytes = Buffer.from(this.loginSession, "utf8");
-        const loginSessionSha256 = createHash7("sha256").update(loginSessionBytes).digest("hex");
+        const loginSessionSha256 = createHash8("sha256").update(loginSessionBytes).digest("hex");
         return join5(directory, `${loginSessionSha256}.json`);
       }
       derToRawSignature(derSignature) {
@@ -35776,12 +35776,8 @@ var require_dist_cjs16 = __commonJS({
   }
 });
 
-// action/src/publish.ts
-var import_client_s3 = __toESM(require_dist_cjs16(), 1);
-var import_node_crypto7 = require("node:crypto");
+// action/src/index.ts
 var import_node_fs3 = require("node:fs");
-var import_promises3 = require("node:fs/promises");
-var import_node_path6 = require("node:path");
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -35889,7 +35885,7 @@ __export(external_exports, {
   cuid: () => cuid3,
   cuid2: () => cuid22,
   custom: () => custom,
-  date: () => date4,
+  date: () => date3,
   decode: () => decode2,
   decodeAsync: () => decodeAsync2,
   describe: () => describe2,
@@ -35911,7 +35907,7 @@ __export(external_exports, {
   function: () => _function,
   getErrorMap: () => getErrorMap,
   globalRegistry: () => globalRegistry,
-  gt: () => _gt2,
+  gt: () => _gt,
   gte: () => _gte,
   guid: () => guid2,
   hash: () => hash,
@@ -35942,7 +35938,7 @@ __export(external_exports, {
   lt: () => _lt,
   lte: () => _lte,
   mac: () => mac2,
-  map: () => map3,
+  map: () => map,
   maxLength: () => _maxLength,
   maxSize: () => _maxSize,
   meta: () => meta2,
@@ -35966,7 +35962,7 @@ __export(external_exports, {
   object: () => object,
   optional: () => optional,
   overwrite: () => _overwrite,
-  parse: () => parse3,
+  parse: () => parse2,
   parseAsync: () => parseAsync2,
   partialRecord: () => partialRecord,
   pipe: () => pipe,
@@ -36146,7 +36142,7 @@ __export(core_exports2, {
   _bigint: () => _bigint,
   _boolean: () => _boolean,
   _catch: () => _catch,
-  _check: () => _check2,
+  _check: () => _check,
   _cidrv4: () => _cidrv4,
   _cidrv6: () => _cidrv6,
   _coercedBigint: () => _coercedBigint,
@@ -36172,7 +36168,7 @@ __export(core_exports2, {
   _file: () => _file,
   _float32: () => _float32,
   _float64: () => _float64,
-  _gt: () => _gt2,
+  _gt: () => _gt,
   _gte: () => _gte,
   _guid: () => _guid,
   _includes: () => _includes,
@@ -36286,7 +36282,7 @@ __export(core_exports2, {
   isValidJWT: () => isValidJWT,
   locales: () => locales_exports,
   meta: () => meta,
-  parse: () => parse2,
+  parse: () => parse,
   parseAsync: () => parseAsync,
   prettifyError: () => prettifyError,
   process: () => process2,
@@ -36306,7 +36302,7 @@ __export(core_exports2, {
 });
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/core.js
-var _a2;
+var _a;
 var NEVER = /* @__PURE__ */ Object.freeze({
   status: "aborted"
 });
@@ -36374,7 +36370,7 @@ var $ZodEncodeError = class extends Error {
     this.name = "ZodEncodeError";
   }
 };
-(_a2 = globalThis).__zod_globalConfig ?? (_a2.__zod_globalConfig = {});
+(_a = globalThis).__zod_globalConfig ?? (_a.__zod_globalConfig = {});
 var globalConfig = globalThis.__zod_globalConfig;
 function config(newConfig) {
   if (newConfig)
@@ -36423,7 +36419,7 @@ __export(util_exports, {
   issue: () => issue,
   joinValues: () => joinValues,
   jsonStringifyReplacer: () => jsonStringifyReplacer,
-  merge: () => merge2,
+  merge: () => merge,
   mergeDefs: () => mergeDefs,
   normalizeParams: () => normalizeParams,
   nullish: () => nullish,
@@ -36855,7 +36851,7 @@ function safeExtend(schema, shape) {
   });
   return clone(schema, def);
 }
-function merge2(a5, b5) {
+function merge(a5, b5) {
   if (a5._zod.def.checks?.length) {
     throw new Error(".merge() cannot be used on object schemas containing refinements. Use .safeExtend() instead.");
   }
@@ -37231,7 +37227,7 @@ var _parse = (_Err) => (schema, value, _ctx, _params) => {
   }
   return result.value;
 };
-var parse2 = /* @__PURE__ */ _parse($ZodRealError);
+var parse = /* @__PURE__ */ _parse($ZodRealError);
 var _parseAsync = (_Err) => async (schema, value, _ctx, params) => {
   const ctx = _ctx ? { ..._ctx, async: true } : { async: true };
   let result = schema._zod.run({ value, issues: [] }, ctx);
@@ -37317,7 +37313,7 @@ __export(regexes_exports, {
   cidrv6: () => cidrv6,
   cuid: () => cuid,
   cuid2: () => cuid2,
-  date: () => date2,
+  date: () => date,
   datetime: () => datetime,
   domain: () => domain,
   duration: () => duration,
@@ -37357,7 +37353,7 @@ __export(regexes_exports, {
   sha512_base64url: () => sha512_base64url,
   sha512_hex: () => sha512_hex,
   string: () => string,
-  time: () => time2,
+  time: () => time,
   ulid: () => ulid,
   undefined: () => _undefined,
   unicodeEmail: () => unicodeEmail,
@@ -37410,13 +37406,13 @@ var domain = /^([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 var httpProtocol = /^https?$/;
 var e164 = /^\+[1-9]\d{6,14}$/;
 var dateSource = `(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))`;
-var date2 = /* @__PURE__ */ new RegExp(`^${dateSource}$`);
+var date = /* @__PURE__ */ new RegExp(`^${dateSource}$`);
 function timeSource(args) {
   const hhmm = `(?:[01]\\d|2[0-3]):[0-5]\\d`;
   const regex = typeof args.precision === "number" ? args.precision === -1 ? `${hhmm}` : args.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args.precision}}` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
   return regex;
 }
-function time2(args) {
+function time(args) {
   return new RegExp(`^${timeSource(args)}$`);
 }
 function datetime(args) {
@@ -38316,11 +38312,11 @@ var $ZodISODateTime = /* @__PURE__ */ $constructor("$ZodISODateTime", (inst, def
   $ZodStringFormat.init(inst, def);
 });
 var $ZodISODate = /* @__PURE__ */ $constructor("$ZodISODate", (inst, def) => {
-  def.pattern ?? (def.pattern = date2);
+  def.pattern ?? (def.pattern = date);
   $ZodStringFormat.init(inst, def);
 });
 var $ZodISOTime = /* @__PURE__ */ $constructor("$ZodISOTime", (inst, def) => {
-  def.pattern ?? (def.pattern = time2(def));
+  def.pattern ?? (def.pattern = time(def));
   $ZodStringFormat.init(inst, def);
 });
 var $ZodISODuration = /* @__PURE__ */ $constructor("$ZodISODuration", (inst, def) => {
@@ -40023,10 +40019,10 @@ var $ZodFunction = /* @__PURE__ */ $constructor("$ZodFunction", (inst, def) => {
       throw new Error("implement() must be called with a function");
     }
     return function(...args) {
-      const parsedArgs = inst._def.input ? parse2(inst._def.input, args) : args;
+      const parsedArgs = inst._def.input ? parse(inst._def.input, args) : args;
       const result = Reflect.apply(func, this, parsedArgs);
       if (inst._def.output) {
-        return parse2(inst._def.output, result);
+        return parse(inst._def.output, result);
       }
       return result;
     };
@@ -40206,7 +40202,7 @@ __export(locales_exports, {
 });
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ar.js
-var error2 = () => {
+var error = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0641", verb: "\u0623\u0646 \u064A\u062D\u0648\u064A" },
     file: { unit: "\u0628\u0627\u064A\u062A", verb: "\u0623\u0646 \u064A\u062D\u0648\u064A" },
@@ -40308,12 +40304,12 @@ var error2 = () => {
 };
 function ar_default() {
   return {
-    localeError: error2()
+    localeError: error()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/az.js
-var error3 = () => {
+var error2 = () => {
   const Sizable = {
     string: { unit: "simvol", verb: "olmal\u0131d\u0131r" },
     file: { unit: "bayt", verb: "olmal\u0131d\u0131r" },
@@ -40414,7 +40410,7 @@ var error3 = () => {
 };
 function az_default() {
   return {
-    localeError: error3()
+    localeError: error2()
   };
 }
 
@@ -40434,7 +40430,7 @@ function getBelarusianPlural(count, one, few, many) {
   }
   return many;
 }
-var error4 = () => {
+var error3 = () => {
   const Sizable = {
     string: {
       unit: {
@@ -40571,12 +40567,12 @@ var error4 = () => {
 };
 function be_default() {
   return {
-    localeError: error4()
+    localeError: error3()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/bg.js
-var error5 = () => {
+var error4 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0430", verb: "\u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430" },
     file: { unit: "\u0431\u0430\u0439\u0442\u0430", verb: "\u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430" },
@@ -40692,12 +40688,12 @@ var error5 = () => {
 };
 function bg_default() {
   return {
-    localeError: error5()
+    localeError: error4()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ca.js
-var error6 = () => {
+var error5 = () => {
   const Sizable = {
     string: { unit: "car\xE0cters", verb: "contenir" },
     file: { unit: "bytes", verb: "contenir" },
@@ -40801,12 +40797,12 @@ var error6 = () => {
 };
 function ca_default() {
   return {
-    localeError: error6()
+    localeError: error5()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/cs.js
-var error7 = () => {
+var error6 = () => {
   const Sizable = {
     string: { unit: "znak\u016F", verb: "m\xEDt" },
     file: { unit: "bajt\u016F", verb: "m\xEDt" },
@@ -40913,12 +40909,12 @@ var error7 = () => {
 };
 function cs_default() {
   return {
-    localeError: error7()
+    localeError: error6()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/da.js
-var error8 = () => {
+var error7 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "havde" },
     file: { unit: "bytes", verb: "havde" },
@@ -41029,12 +41025,12 @@ var error8 = () => {
 };
 function da_default() {
   return {
-    localeError: error8()
+    localeError: error7()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/de.js
-var error9 = () => {
+var error8 = () => {
   const Sizable = {
     string: { unit: "Zeichen", verb: "zu haben" },
     file: { unit: "Bytes", verb: "zu haben" },
@@ -41138,12 +41134,12 @@ var error9 = () => {
 };
 function de_default() {
   return {
-    localeError: error9()
+    localeError: error8()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/el.js
-var error10 = () => {
+var error9 = () => {
   const Sizable = {
     string: { unit: "\u03C7\u03B1\u03C1\u03B1\u03BA\u03C4\u03AE\u03C1\u03B5\u03C2", verb: "\u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9" },
     file: { unit: "bytes", verb: "\u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9" },
@@ -41248,12 +41244,12 @@ var error10 = () => {
 };
 function el_default() {
   return {
-    localeError: error10()
+    localeError: error9()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/en.js
-var error11 = () => {
+var error10 = () => {
   const Sizable = {
     string: { unit: "characters", verb: "to have" },
     file: { unit: "bytes", verb: "to have" },
@@ -41361,12 +41357,12 @@ var error11 = () => {
 };
 function en_default() {
   return {
-    localeError: error11()
+    localeError: error10()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/eo.js
-var error12 = () => {
+var error11 = () => {
   const Sizable = {
     string: { unit: "karaktrojn", verb: "havi" },
     file: { unit: "bajtojn", verb: "havi" },
@@ -41471,12 +41467,12 @@ var error12 = () => {
 };
 function eo_default() {
   return {
-    localeError: error12()
+    localeError: error11()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/es.js
-var error13 = () => {
+var error12 = () => {
   const Sizable = {
     string: { unit: "caracteres", verb: "tener" },
     file: { unit: "bytes", verb: "tener" },
@@ -41604,12 +41600,12 @@ var error13 = () => {
 };
 function es_default() {
   return {
-    localeError: error13()
+    localeError: error12()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fa.js
-var error14 = () => {
+var error13 = () => {
   const Sizable = {
     string: { unit: "\u06A9\u0627\u0631\u0627\u06A9\u062A\u0631", verb: "\u062F\u0627\u0634\u062A\u0647 \u0628\u0627\u0634\u062F" },
     file: { unit: "\u0628\u0627\u06CC\u062A", verb: "\u062F\u0627\u0634\u062A\u0647 \u0628\u0627\u0634\u062F" },
@@ -41719,12 +41715,12 @@ var error14 = () => {
 };
 function fa_default() {
   return {
-    localeError: error14()
+    localeError: error13()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fi.js
-var error15 = () => {
+var error14 = () => {
   const Sizable = {
     string: { unit: "merkki\xE4", subject: "merkkijonon" },
     file: { unit: "tavua", subject: "tiedoston" },
@@ -41832,12 +41828,12 @@ var error15 = () => {
 };
 function fi_default() {
   return {
-    localeError: error15()
+    localeError: error14()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr.js
-var error16 = () => {
+var error15 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
     file: { unit: "octets", verb: "avoir" },
@@ -41958,12 +41954,12 @@ var error16 = () => {
 };
 function fr_default() {
   return {
-    localeError: error16()
+    localeError: error15()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/fr-CA.js
-var error17 = () => {
+var error16 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
     file: { unit: "octets", verb: "avoir" },
@@ -42066,12 +42062,12 @@ var error17 = () => {
 };
 function fr_CA_default() {
   return {
-    localeError: error17()
+    localeError: error16()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/he.js
-var error18 = () => {
+var error17 = () => {
   const TypeNames = {
     string: { label: "\u05DE\u05D7\u05E8\u05D5\u05D6\u05EA", gender: "f" },
     number: { label: "\u05DE\u05E1\u05E4\u05E8", gender: "m" },
@@ -42261,12 +42257,12 @@ var error18 = () => {
 };
 function he_default() {
   return {
-    localeError: error18()
+    localeError: error17()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hr.js
-var error19 = () => {
+var error18 = () => {
   const Sizable = {
     string: { unit: "znakova", verb: "imati" },
     file: { unit: "bajtova", verb: "imati" },
@@ -42384,12 +42380,12 @@ var error19 = () => {
 };
 function hr_default() {
   return {
-    localeError: error19()
+    localeError: error18()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/hu.js
-var error20 = () => {
+var error19 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "legyen" },
     file: { unit: "byte", verb: "legyen" },
@@ -42493,7 +42489,7 @@ var error20 = () => {
 };
 function hu_default() {
   return {
-    localeError: error20()
+    localeError: error19()
   };
 }
 
@@ -42508,7 +42504,7 @@ function withDefiniteArticle(word) {
   const lastChar = word[word.length - 1];
   return word + (vowels.includes(lastChar) ? "\u0576" : "\u0568");
 }
-var error21 = () => {
+var error20 = () => {
   const Sizable = {
     string: {
       unit: {
@@ -42641,12 +42637,12 @@ var error21 = () => {
 };
 function hy_default() {
   return {
-    localeError: error21()
+    localeError: error20()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/id.js
-var error22 = () => {
+var error21 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "memiliki" },
     file: { unit: "byte", verb: "memiliki" },
@@ -42748,12 +42744,12 @@ var error22 = () => {
 };
 function id_default() {
   return {
-    localeError: error22()
+    localeError: error21()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/is.js
-var error23 = () => {
+var error22 = () => {
   const Sizable = {
     string: { unit: "stafi", verb: "a\xF0 hafa" },
     file: { unit: "b\xE6ti", verb: "a\xF0 hafa" },
@@ -42858,12 +42854,12 @@ var error23 = () => {
 };
 function is_default() {
   return {
-    localeError: error23()
+    localeError: error22()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/it.js
-var error24 = () => {
+var error23 = () => {
   const Sizable = {
     string: { unit: "caratteri", verb: "avere" },
     file: { unit: "byte", verb: "avere" },
@@ -42967,12 +42963,12 @@ var error24 = () => {
 };
 function it_default() {
   return {
-    localeError: error24()
+    localeError: error23()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ja.js
-var error25 = () => {
+var error24 = () => {
   const Sizable = {
     string: { unit: "\u6587\u5B57", verb: "\u3067\u3042\u308B" },
     file: { unit: "\u30D0\u30A4\u30C8", verb: "\u3067\u3042\u308B" },
@@ -43075,12 +43071,12 @@ var error25 = () => {
 };
 function ja_default() {
   return {
-    localeError: error25()
+    localeError: error24()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ka.js
-var error26 = () => {
+var error25 = () => {
   const Sizable = {
     string: { unit: "\u10E1\u10D8\u10DB\u10D1\u10DD\u10DA\u10DD", verb: "\u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D8\u10EA\u10D0\u10D5\u10D3\u10D4\u10E1" },
     file: { unit: "\u10D1\u10D0\u10D8\u10E2\u10D8", verb: "\u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D8\u10EA\u10D0\u10D5\u10D3\u10D4\u10E1" },
@@ -43188,12 +43184,12 @@ var error26 = () => {
 };
 function ka_default() {
   return {
-    localeError: error26()
+    localeError: error25()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/km.js
-var error27 = () => {
+var error26 = () => {
   const Sizable = {
     string: { unit: "\u178F\u17BD\u17A2\u1780\u17D2\u179F\u179A", verb: "\u1782\u17BD\u179A\u1798\u17B6\u1793" },
     file: { unit: "\u1794\u17C3", verb: "\u1782\u17BD\u179A\u1798\u17B6\u1793" },
@@ -43299,7 +43295,7 @@ var error27 = () => {
 };
 function km_default() {
   return {
-    localeError: error27()
+    localeError: error26()
   };
 }
 
@@ -43309,7 +43305,7 @@ function kh_default() {
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ko.js
-var error28 = () => {
+var error27 = () => {
   const Sizable = {
     string: { unit: "\uBB38\uC790", verb: "to have" },
     file: { unit: "\uBC14\uC774\uD2B8", verb: "to have" },
@@ -43416,7 +43412,7 @@ var error28 = () => {
 };
 function ko_default() {
   return {
-    localeError: error28()
+    localeError: error27()
   };
 }
 
@@ -43434,7 +43430,7 @@ function getUnitTypeFromNumber(number4) {
     return "one";
   return "few";
 }
-var error29 = () => {
+var error28 = () => {
   const Sizable = {
     string: {
       unit: {
@@ -43620,12 +43616,12 @@ var error29 = () => {
 };
 function lt_default() {
   return {
-    localeError: error29()
+    localeError: error28()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/mk.js
-var error30 = () => {
+var error29 = () => {
   const Sizable = {
     string: { unit: "\u0437\u043D\u0430\u0446\u0438", verb: "\u0434\u0430 \u0438\u043C\u0430\u0430\u0442" },
     file: { unit: "\u0431\u0430\u0458\u0442\u0438", verb: "\u0434\u0430 \u0438\u043C\u0430\u0430\u0442" },
@@ -43730,12 +43726,12 @@ var error30 = () => {
 };
 function mk_default() {
   return {
-    localeError: error30()
+    localeError: error29()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ms.js
-var error31 = () => {
+var error30 = () => {
   const Sizable = {
     string: { unit: "aksara", verb: "mempunyai" },
     file: { unit: "bait", verb: "mempunyai" },
@@ -43838,12 +43834,12 @@ var error31 = () => {
 };
 function ms_default() {
   return {
-    localeError: error31()
+    localeError: error30()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/nl.js
-var error32 = () => {
+var error31 = () => {
   const Sizable = {
     string: { unit: "tekens", verb: "heeft" },
     file: { unit: "bytes", verb: "heeft" },
@@ -43949,12 +43945,12 @@ var error32 = () => {
 };
 function nl_default() {
   return {
-    localeError: error32()
+    localeError: error31()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/no.js
-var error33 = () => {
+var error32 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "\xE5 ha" },
     file: { unit: "bytes", verb: "\xE5 ha" },
@@ -44058,12 +44054,12 @@ var error33 = () => {
 };
 function no_default() {
   return {
-    localeError: error33()
+    localeError: error32()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ota.js
-var error34 = () => {
+var error33 = () => {
   const Sizable = {
     string: { unit: "harf", verb: "olmal\u0131d\u0131r" },
     file: { unit: "bayt", verb: "olmal\u0131d\u0131r" },
@@ -44168,12 +44164,12 @@ var error34 = () => {
 };
 function ota_default() {
   return {
-    localeError: error34()
+    localeError: error33()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ps.js
-var error35 = () => {
+var error34 = () => {
   const Sizable = {
     string: { unit: "\u062A\u0648\u06A9\u064A", verb: "\u0648\u0644\u0631\u064A" },
     file: { unit: "\u0628\u0627\u06CC\u067C\u0633", verb: "\u0648\u0644\u0631\u064A" },
@@ -44283,12 +44279,12 @@ var error35 = () => {
 };
 function ps_default() {
   return {
-    localeError: error35()
+    localeError: error34()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pl.js
-var error36 = () => {
+var error35 = () => {
   const Sizable = {
     string: { unit: "znak\xF3w", verb: "mie\u0107" },
     file: { unit: "bajt\xF3w", verb: "mie\u0107" },
@@ -44393,12 +44389,12 @@ var error36 = () => {
 };
 function pl_default() {
   return {
-    localeError: error36()
+    localeError: error35()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/pt.js
-var error37 = () => {
+var error36 = () => {
   const Sizable = {
     string: { unit: "caracteres", verb: "ter" },
     file: { unit: "bytes", verb: "ter" },
@@ -44502,12 +44498,12 @@ var error37 = () => {
 };
 function pt_default() {
   return {
-    localeError: error37()
+    localeError: error36()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ro.js
-var error38 = () => {
+var error37 = () => {
   const Sizable = {
     string: { unit: "caractere", verb: "s\u0103 aib\u0103" },
     file: { unit: "octe\u021Bi", verb: "s\u0103 aib\u0103" },
@@ -44622,7 +44618,7 @@ var error38 = () => {
 };
 function ro_default() {
   return {
-    localeError: error38()
+    localeError: error37()
   };
 }
 
@@ -44642,7 +44638,7 @@ function getRussianPlural(count, one, few, many) {
   }
   return many;
 }
-var error39 = () => {
+var error38 = () => {
   const Sizable = {
     string: {
       unit: {
@@ -44779,12 +44775,12 @@ var error39 = () => {
 };
 function ru_default() {
   return {
-    localeError: error39()
+    localeError: error38()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sl.js
-var error40 = () => {
+var error39 = () => {
   const Sizable = {
     string: { unit: "znakov", verb: "imeti" },
     file: { unit: "bajtov", verb: "imeti" },
@@ -44889,12 +44885,12 @@ var error40 = () => {
 };
 function sl_default() {
   return {
-    localeError: error40()
+    localeError: error39()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/sv.js
-var error41 = () => {
+var error40 = () => {
   const Sizable = {
     string: { unit: "tecken", verb: "att ha" },
     file: { unit: "bytes", verb: "att ha" },
@@ -45000,12 +44996,12 @@ var error41 = () => {
 };
 function sv_default() {
   return {
-    localeError: error41()
+    localeError: error40()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ta.js
-var error42 = () => {
+var error41 = () => {
   const Sizable = {
     string: { unit: "\u0B8E\u0BB4\u0BC1\u0BA4\u0BCD\u0BA4\u0BC1\u0B95\u0BCD\u0B95\u0BB3\u0BCD", verb: "\u0B95\u0BCA\u0BA3\u0BCD\u0B9F\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD" },
     file: { unit: "\u0BAA\u0BC8\u0B9F\u0BCD\u0B9F\u0BC1\u0B95\u0BB3\u0BCD", verb: "\u0B95\u0BCA\u0BA3\u0BCD\u0B9F\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD" },
@@ -45111,12 +45107,12 @@ var error42 = () => {
 };
 function ta_default() {
   return {
-    localeError: error42()
+    localeError: error41()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/th.js
-var error43 = () => {
+var error42 = () => {
   const Sizable = {
     string: { unit: "\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23", verb: "\u0E04\u0E27\u0E23\u0E21\u0E35" },
     file: { unit: "\u0E44\u0E1A\u0E15\u0E4C", verb: "\u0E04\u0E27\u0E23\u0E21\u0E35" },
@@ -45222,12 +45218,12 @@ var error43 = () => {
 };
 function th_default() {
   return {
-    localeError: error43()
+    localeError: error42()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/tr.js
-var error44 = () => {
+var error43 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "olmal\u0131" },
     file: { unit: "bayt", verb: "olmal\u0131" },
@@ -45328,12 +45324,12 @@ var error44 = () => {
 };
 function tr_default() {
   return {
-    localeError: error44()
+    localeError: error43()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uk.js
-var error45 = () => {
+var error44 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0456\u0432", verb: "\u043C\u0430\u0442\u0438\u043C\u0435" },
     file: { unit: "\u0431\u0430\u0439\u0442\u0456\u0432", verb: "\u043C\u0430\u0442\u0438\u043C\u0435" },
@@ -45437,7 +45433,7 @@ var error45 = () => {
 };
 function uk_default() {
   return {
-    localeError: error45()
+    localeError: error44()
   };
 }
 
@@ -45447,7 +45443,7 @@ function ua_default() {
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/ur.js
-var error46 = () => {
+var error45 = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0648\u0641", verb: "\u06C1\u0648\u0646\u0627" },
     file: { unit: "\u0628\u0627\u0626\u0679\u0633", verb: "\u06C1\u0648\u0646\u0627" },
@@ -45553,12 +45549,12 @@ var error46 = () => {
 };
 function ur_default() {
   return {
-    localeError: error46()
+    localeError: error45()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/uz.js
-var error47 = () => {
+var error46 = () => {
   const Sizable = {
     string: { unit: "belgi", verb: "bo\u2018lishi kerak" },
     file: { unit: "bayt", verb: "bo\u2018lishi kerak" },
@@ -45664,12 +45660,12 @@ var error47 = () => {
 };
 function uz_default() {
   return {
-    localeError: error47()
+    localeError: error46()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/vi.js
-var error48 = () => {
+var error47 = () => {
   const Sizable = {
     string: { unit: "k\xFD t\u1EF1", verb: "c\xF3" },
     file: { unit: "byte", verb: "c\xF3" },
@@ -45773,12 +45769,12 @@ var error48 = () => {
 };
 function vi_default() {
   return {
-    localeError: error48()
+    localeError: error47()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-CN.js
-var error49 = () => {
+var error48 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u7B26", verb: "\u5305\u542B" },
     file: { unit: "\u5B57\u8282", verb: "\u5305\u542B" },
@@ -45883,12 +45879,12 @@ var error49 = () => {
 };
 function zh_CN_default() {
   return {
-    localeError: error49()
+    localeError: error48()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/zh-TW.js
-var error50 = () => {
+var error49 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u5143", verb: "\u64C1\u6709" },
     file: { unit: "\u4F4D\u5143\u7D44", verb: "\u64C1\u6709" },
@@ -45991,12 +45987,12 @@ var error50 = () => {
 };
 function zh_TW_default() {
   return {
-    localeError: error50()
+    localeError: error49()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/locales/yo.js
-var error51 = () => {
+var error50 = () => {
   const Sizable = {
     string: { unit: "\xE0mi", verb: "n\xED" },
     file: { unit: "bytes", verb: "n\xED" },
@@ -46099,12 +46095,12 @@ var error51 = () => {
 };
 function yo_default() {
   return {
-    localeError: error51()
+    localeError: error50()
   };
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/registries.js
-var _a3;
+var _a2;
 var $output = /* @__PURE__ */ Symbol("ZodOutput");
 var $input = /* @__PURE__ */ Symbol("ZodInput");
 var $ZodRegistry = class {
@@ -46150,7 +46146,7 @@ var $ZodRegistry = class {
 function registry() {
   return new $ZodRegistry();
 }
-(_a3 = globalThis).__zod_globalRegistry ?? (_a3.__zod_globalRegistry = registry());
+(_a2 = globalThis).__zod_globalRegistry ?? (_a2.__zod_globalRegistry = registry());
 var globalRegistry = globalThis.__zod_globalRegistry;
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/api.js
@@ -46654,7 +46650,7 @@ function _lte(value, params) {
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _gt2(value, params) {
+function _gt(value, params) {
   return new $ZodCheckGreaterThan({
     check: "greater_than",
     ...normalizeParams(params),
@@ -46673,7 +46669,7 @@ function _gte(value, params) {
 }
 // @__NO_SIDE_EFFECTS__
 function _positive(params) {
-  return /* @__PURE__ */ _gt2(0, params);
+  return /* @__PURE__ */ _gt(0, params);
 }
 // @__NO_SIDE_EFFECTS__
 function _negative(params) {
@@ -47069,7 +47065,7 @@ function _refine(Class2, fn, _params) {
 }
 // @__NO_SIDE_EFFECTS__
 function _superRefine(fn, params) {
-  const ch = /* @__PURE__ */ _check2((payload) => {
+  const ch = /* @__PURE__ */ _check((payload) => {
     payload.addIssue = (issue2) => {
       if (typeof issue2 === "string") {
         payload.issues.push(issue(issue2, payload.value, ch._zod.def));
@@ -47089,7 +47085,7 @@ function _superRefine(fn, params) {
   return ch;
 }
 // @__NO_SIDE_EFFECTS__
-function _check2(fn, params) {
+function _check(fn, params) {
   const ch = new $ZodCheck({
     check: "custom",
     ...normalizeParams(params)
@@ -48262,7 +48258,7 @@ __export(schemas_exports2, {
   cuid: () => cuid3,
   cuid2: () => cuid22,
   custom: () => custom,
-  date: () => date4,
+  date: () => date3,
   describe: () => describe2,
   discriminatedUnion: () => discriminatedUnion,
   e164: () => e1642,
@@ -48296,7 +48292,7 @@ __export(schemas_exports2, {
   looseObject: () => looseObject,
   looseRecord: () => looseRecord,
   mac: () => mac2,
-  map: () => map3,
+  map: () => map,
   meta: () => meta2,
   nan: () => nan,
   nanoid: () => nanoid2,
@@ -48348,7 +48344,7 @@ __export(schemas_exports2, {
 var checks_exports2 = {};
 __export(checks_exports2, {
   endsWith: () => _endsWith,
-  gt: () => _gt2,
+  gt: () => _gt,
   gte: () => _gte,
   includes: () => _includes,
   length: () => _length,
@@ -48385,10 +48381,10 @@ __export(iso_exports, {
   ZodISODateTime: () => ZodISODateTime,
   ZodISODuration: () => ZodISODuration,
   ZodISOTime: () => ZodISOTime,
-  date: () => date3,
+  date: () => date2,
   datetime: () => datetime2,
   duration: () => duration2,
-  time: () => time3
+  time: () => time2
 });
 var ZodISODateTime = /* @__PURE__ */ $constructor("ZodISODateTime", (inst, def) => {
   $ZodISODateTime.init(inst, def);
@@ -48401,14 +48397,14 @@ var ZodISODate = /* @__PURE__ */ $constructor("ZodISODate", (inst, def) => {
   $ZodISODate.init(inst, def);
   ZodStringFormat.init(inst, def);
 });
-function date3(params) {
+function date2(params) {
   return _isoDate(ZodISODate, params);
 }
 var ZodISOTime = /* @__PURE__ */ $constructor("ZodISOTime", (inst, def) => {
   $ZodISOTime.init(inst, def);
   ZodStringFormat.init(inst, def);
 });
-function time3(params) {
+function time2(params) {
   return _isoTime(ZodISOTime, params);
 }
 var ZodISODuration = /* @__PURE__ */ $constructor("ZodISODuration", (inst, def) => {
@@ -48460,7 +48456,7 @@ var ZodRealError = /* @__PURE__ */ $constructor("ZodError", initializer2, {
 });
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/parse.js
-var parse3 = /* @__PURE__ */ _parse(ZodRealError);
+var parse2 = /* @__PURE__ */ _parse(ZodRealError);
 var parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
 var safeParse2 = /* @__PURE__ */ _safeParse(ZodRealError);
 var safeParseAsync2 = /* @__PURE__ */ _safeParseAsync(ZodRealError);
@@ -48523,7 +48519,7 @@ var ZodType = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   inst.def = def;
   inst.type = def.type;
   Object.defineProperty(inst, "_def", { value: def });
-  inst.parse = (data, params) => parse3(inst, data, params, { callee: inst.parse });
+  inst.parse = (data, params) => parse2(inst, data, params, { callee: inst.parse });
   inst.safeParse = (data, params) => safeParse2(inst, data, params);
   inst.parseAsync = async (data, params) => parseAsync2(inst, data, params, { callee: inst.parseAsync });
   inst.safeParseAsync = async (data, params) => safeParseAsync2(inst, data, params);
@@ -48723,8 +48719,8 @@ var ZodString = /* @__PURE__ */ $constructor("ZodString", (inst, def) => {
   inst.cidrv6 = (params) => inst.check(_cidrv6(ZodCIDRv6, params));
   inst.e164 = (params) => inst.check(_e164(ZodE164, params));
   inst.datetime = (params) => inst.check(datetime2(params));
-  inst.date = (params) => inst.check(date3(params));
-  inst.time = (params) => inst.check(time3(params));
+  inst.date = (params) => inst.check(date2(params));
+  inst.time = (params) => inst.check(time2(params));
   inst.duration = (params) => inst.check(duration2(params));
 });
 function string2(params) {
@@ -48917,7 +48913,7 @@ var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
   inst._zod.processJSONSchema = (ctx, json2, params) => numberProcessor(inst, ctx, json2, params);
   _installLazyMethods(inst, "ZodNumber", {
     gt(value, params) {
-      return this.check(_gt2(value, params));
+      return this.check(_gt(value, params));
     },
     gte(value, params) {
       return this.check(_gte(value, params));
@@ -48941,7 +48937,7 @@ var ZodNumber = /* @__PURE__ */ $constructor("ZodNumber", (inst, def) => {
       return this.check(int(params));
     },
     positive(params) {
-      return this.check(_gt2(0, params));
+      return this.check(_gt(0, params));
     },
     nonnegative(params) {
       return this.check(_gte(0, params));
@@ -49005,13 +49001,13 @@ var ZodBigInt = /* @__PURE__ */ $constructor("ZodBigInt", (inst, def) => {
   inst._zod.processJSONSchema = (ctx, json2, params) => bigintProcessor(inst, ctx, json2, params);
   inst.gte = (value, params) => inst.check(_gte(value, params));
   inst.min = (value, params) => inst.check(_gte(value, params));
-  inst.gt = (value, params) => inst.check(_gt2(value, params));
+  inst.gt = (value, params) => inst.check(_gt(value, params));
   inst.gte = (value, params) => inst.check(_gte(value, params));
   inst.min = (value, params) => inst.check(_gte(value, params));
   inst.lt = (value, params) => inst.check(_lt(value, params));
   inst.lte = (value, params) => inst.check(_lte(value, params));
   inst.max = (value, params) => inst.check(_lte(value, params));
-  inst.positive = (params) => inst.check(_gt2(BigInt(0), params));
+  inst.positive = (params) => inst.check(_gt(BigInt(0), params));
   inst.negative = (params) => inst.check(_lt(BigInt(0), params));
   inst.nonpositive = (params) => inst.check(_lte(BigInt(0), params));
   inst.nonnegative = (params) => inst.check(_gte(BigInt(0), params));
@@ -49100,7 +49096,7 @@ var ZodDate = /* @__PURE__ */ $constructor("ZodDate", (inst, def) => {
   inst.minDate = c5.minimum ? new Date(c5.minimum) : null;
   inst.maxDate = c5.maximum ? new Date(c5.maximum) : null;
 });
-function date4(params) {
+function date3(params) {
   return _date(ZodDate, params);
 }
 var ZodArray = /* @__PURE__ */ $constructor("ZodArray", (inst, def) => {
@@ -49330,7 +49326,7 @@ var ZodMap = /* @__PURE__ */ $constructor("ZodMap", (inst, def) => {
   inst.max = (...args) => inst.check(_maxSize(...args));
   inst.size = (...args) => inst.check(_size(...args));
 });
-function map3(keyType, valueType, params) {
+function map(keyType, valueType, params) {
   return new ZodMap({
     type: "map",
     keyType,
@@ -50274,7 +50270,7 @@ var coerce_exports = {};
 __export(coerce_exports, {
   bigint: () => bigint3,
   boolean: () => boolean3,
-  date: () => date5,
+  date: () => date4,
   number: () => number3,
   string: () => string3
 });
@@ -50290,16 +50286,14 @@ function boolean3(params) {
 function bigint3(params) {
   return _coercedBigint(ZodBigInt, params);
 }
-function date5(params) {
+function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
 // node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 config(en_default());
 
-// action/src/publish.ts
-var SIGNING_ALGORITHM = "rsa-v1_5-sha256";
-var MANIFEST_CONTENT_TYPE = "application/expo+json";
+// action/src/input.ts
 var platformSchema = external_exports.enum(["ios", "android"], {
   error: 'Input "platform" must be ios or android'
 });
@@ -50336,6 +50330,44 @@ var actionInputsSchema = external_exports.object({
   signingPrivateKey: external_exports.string().min(1),
   keyid: keyidSchema
 });
+function input(name, fallback2) {
+  const value = process.env[`INPUT_${name.toUpperCase()}`];
+  const trimmed = value?.trim();
+  if (trimmed) return trimmed;
+  if (fallback2 !== void 0) return fallback2;
+  throw new Error(`Missing required input "${name}"`);
+}
+function parseActionInputs(value) {
+  const parsed = actionInputsSchema.safeParse(value);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Invalid Action inputs");
+  return parsed.data;
+}
+function readActionInputs() {
+  return parseActionInputs({
+    exportDir: input("export-dir"),
+    project: input("project"),
+    platform: input("platform"),
+    channel: input("channel"),
+    runtimeVersion: input("runtime-version"),
+    publicBaseUrl: input("public-base-url"),
+    r2Bucket: input("r2-bucket"),
+    r2AccountId: input("r2-account-id"),
+    r2AccessKeyId: input("r2-access-key-id"),
+    r2SecretAccessKey: input("r2-secret-access-key"),
+    signingPrivateKey: input("signing-private-key"),
+    keyid: input("keyid", "main")
+  });
+}
+
+// action/src/publish.ts
+var import_client_s3 = __toESM(require_dist_cjs16(), 1);
+var import_node_crypto8 = require("node:crypto");
+
+// action/src/prepare.ts
+var import_node_crypto7 = require("node:crypto");
+var import_promises3 = require("node:fs/promises");
+var import_node_path6 = require("node:path");
+var SIGNING_ALGORITHM = "rsa-v1_5-sha256";
 var exportAssetSchema = external_exports.object({ path: external_exports.string(), ext: external_exports.string() });
 var platformMetadataSchema = external_exports.object({
   bundle: external_exports.string().min(1),
@@ -50383,89 +50415,30 @@ var MIME_TYPES = {
   xml: "application/xml",
   zip: "application/zip"
 };
-function fail(message) {
-  throw new Error(message);
-}
-function input(name, fallback2) {
-  const value = process.env[`INPUT_${name.toUpperCase()}`];
-  const trimmed = value?.trim();
-  if (trimmed) return trimmed;
-  if (fallback2 !== void 0) return fallback2;
-  fail(`Missing required input "${name}"`);
-}
-function parseActionInputs(value) {
-  const parsed = actionInputsSchema.safeParse(value);
-  if (!parsed.success) fail(parsed.error.issues[0]?.message ?? "Invalid Action inputs");
-  return parsed.data;
-}
-function readActionInputs() {
-  return parseActionInputs({
-    exportDir: input("export-dir"),
-    project: input("project"),
-    platform: input("platform"),
-    channel: input("channel"),
-    runtimeVersion: input("runtime-version"),
-    publicBaseUrl: input("public-base-url"),
-    r2Bucket: input("r2-bucket"),
-    r2AccountId: input("r2-account-id"),
-    r2AccessKeyId: input("r2-access-key-id"),
-    r2SecretAccessKey: input("r2-secret-access-key"),
-    signingPrivateKey: input("signing-private-key"),
-    keyid: input("keyid", "main")
-  });
-}
-function normalizeExportPath(exportRoot, metadataPath) {
+async function resolveExportFile(exportRoot, metadataPath) {
   if (!metadataPath || metadataPath.includes("\0") || /^[\\/]/u.test(metadataPath) || /^[A-Za-z]:[\\/]/u.test(metadataPath)) {
-    fail("metadata.json contains an invalid absolute asset path");
+    throw new Error("metadata.json contains an invalid absolute asset path");
   }
   const normalized = metadataPath.replaceAll("\\", "/");
   const candidate = (0, import_node_path6.resolve)(exportRoot, normalized);
   const lexicalRelative = (0, import_node_path6.relative)(exportRoot, candidate);
   if (!lexicalRelative || lexicalRelative.startsWith("..") || (0, import_node_path6.isAbsolute)(lexicalRelative)) {
-    fail("metadata.json contains an asset path outside export-dir");
+    throw new Error("metadata.json contains an asset path outside export-dir");
   }
-  return candidate;
-}
-async function resolveExportFile(exportRoot, metadataPath) {
-  const candidate = normalizeExportPath(exportRoot, metadataPath);
   let resolvedRoot;
   let resolvedCandidate;
   try {
     [resolvedRoot, resolvedCandidate] = await Promise.all([(0, import_promises3.realpath)(exportRoot), (0, import_promises3.realpath)(candidate)]);
   } catch {
-    fail(`Export file not found: ${metadataPath}`);
+    throw new Error(`Export file not found: ${metadataPath}`);
   }
   const actualRelative = (0, import_node_path6.relative)(resolvedRoot, resolvedCandidate);
   if (!actualRelative || actualRelative.startsWith("..") || (0, import_node_path6.isAbsolute)(actualRelative)) {
-    fail("metadata.json contains an asset symlink outside export-dir");
+    throw new Error("metadata.json contains an asset symlink outside export-dir");
   }
   const fileStat = await (0, import_promises3.stat)(resolvedCandidate);
-  if (!fileStat.isFile()) fail(`Export path is not a file: ${metadataPath}`);
+  if (!fileStat.isFile()) throw new Error(`Export path is not a file: ${metadataPath}`);
   return resolvedCandidate;
-}
-async function readMetadata(exportRoot) {
-  const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
-  let parsed;
-  try {
-    parsed = JSON.parse(await (0, import_promises3.readFile)(metadataPath, "utf8"));
-  } catch {
-    fail("metadata.json is not valid JSON");
-  }
-  const validated = exportMetadataSchema.safeParse(parsed);
-  if (!validated.success) {
-    fail("Only Expo Metro metadata.json version 0 exports are supported");
-  }
-  return validated.data.fileMetadata;
-}
-function extensionForMetadata(ext) {
-  if (!ext) return void 0;
-  const value = ext.startsWith(".") ? ext.slice(1) : ext;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value)) fail("metadata.json contains an invalid asset extension");
-  return `.${value}`;
-}
-function contentTypeForExtension(ext) {
-  const normalized = ext.replace(/^\./u, "").toLowerCase();
-  return Object.hasOwn(MIME_TYPES, normalized) ? MIME_TYPES[normalized] : "application/octet-stream";
 }
 function hashObject(body) {
   const sha256 = (0, import_node_crypto7.createHash)("sha256").update(body).digest();
@@ -50481,7 +50454,14 @@ async function prepareFile(exportRoot, metadataAsset, assetBaseUrl, prefix, cont
   const filePath = await resolveExportFile(exportRoot, metadataAsset.path);
   const body = await (0, import_promises3.readFile)(filePath);
   const hashes = hashObject(body);
-  const fileExtension = extensionForMetadata(metadataAsset.ext);
+  let fileExtension;
+  if (metadataAsset.ext) {
+    const normalizedExtension = metadataAsset.ext.startsWith(".") ? metadataAsset.ext.slice(1) : metadataAsset.ext;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalizedExtension)) {
+      throw new Error("metadata.json contains an invalid asset extension");
+    }
+    fileExtension = `.${normalizedExtension}`;
+  }
   return {
     key: `${prefix}/assets/${hashes.sha256Hex}`,
     body,
@@ -50492,15 +50472,24 @@ async function prepareFile(exportRoot, metadataAsset, assetBaseUrl, prefix, cont
   };
 }
 async function prepareRelease(input2) {
-  input2 = parseActionInputs(input2);
-  const baseUrl = input2.publicBaseUrl;
-  const publicTupleUrl = `${baseUrl}/v1/projects/${encodeURIComponent(input2.project)}/platforms/${input2.platform}/channels/${input2.channel}/runtimes/${encodeURIComponent(input2.runtimeVersion)}`;
+  const validatedInput = parseActionInputs(input2);
+  const baseUrl = validatedInput.publicBaseUrl;
+  const publicTupleUrl = `${baseUrl}/v1/projects/${encodeURIComponent(validatedInput.project)}/platforms/${validatedInput.platform}/channels/${validatedInput.channel}/runtimes/${encodeURIComponent(validatedInput.runtimeVersion)}`;
   const assetBaseUrl = `${publicTupleUrl}/assets`;
-  const prefix = `releases/${input2.project}/${input2.platform}/${input2.channel}/${input2.runtimeVersion}`;
-  const exportRoot = (0, import_node_path6.resolve)(input2.exportDir);
-  const metadata = await readMetadata(exportRoot);
-  const platformMetadata = platformMetadataSchema.safeParse(metadata[input2.platform]);
-  if (!platformMetadata.success) fail("metadata.json has no valid export for the selected platform");
+  const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
+  const exportRoot = (0, import_node_path6.resolve)(validatedInput.exportDir);
+  const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
+  let parsedMetadata;
+  try {
+    parsedMetadata = JSON.parse(await (0, import_promises3.readFile)(metadataPath, "utf8"));
+  } catch {
+    throw new Error("metadata.json is not valid JSON");
+  }
+  const validatedMetadata = exportMetadataSchema.safeParse(parsedMetadata);
+  if (!validatedMetadata.success) throw new Error("Only Expo Metro metadata.json version 0 exports are supported");
+  const metadata = validatedMetadata.data.fileMetadata;
+  const platformMetadata = platformMetadataSchema.safeParse(metadata[validatedInput.platform]);
+  if (!platformMetadata.success) throw new Error("metadata.json has no valid export for the selected platform");
   const launch = await prepareFile(
     exportRoot,
     { path: platformMetadata.data.bundle, ext: "" },
@@ -50511,22 +50500,18 @@ async function prepareRelease(input2) {
   const assets = [
     launch,
     ...await Promise.all(
-      platformMetadata.data.assets.map(
-        (asset) => prepareFile(
-          exportRoot,
-          asset,
-          assetBaseUrl,
-          prefix,
-          contentTypeForExtension(asset.ext)
-        )
-      )
+      platformMetadata.data.assets.map((asset) => {
+        const extension = asset.ext.replace(/^\./u, "").toLowerCase();
+        const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension] : "application/octet-stream";
+        return prepareFile(exportRoot, asset, assetBaseUrl, prefix, contentType);
+      })
     )
   ];
   const uniqueAssets = /* @__PURE__ */ new Map();
   for (const asset of assets) {
     const existing = uniqueAssets.get(asset.key);
     if (existing && existing.contentType !== asset.contentType) {
-      fail(`One asset hash maps to multiple content types: ${asset.sha256Hex}`);
+      throw new Error(`One asset hash maps to multiple content types: ${asset.sha256Hex}`);
     }
     uniqueAssets.set(asset.key, asset);
   }
@@ -50535,7 +50520,7 @@ async function prepareRelease(input2) {
   const manifest = {
     id: updateId,
     createdAt,
-    runtimeVersion: input2.runtimeVersion,
+    runtimeVersion: validatedInput.runtimeVersion,
     launchAsset: {
       hash: launch.sha256Base64Url,
       key: launch.md5Hex,
@@ -50555,12 +50540,14 @@ async function prepareRelease(input2) {
   const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
   let privateKey;
   try {
-    privateKey = (0, import_node_crypto7.createPrivateKey)(input2.signingPrivateKey);
+    privateKey = (0, import_node_crypto7.createPrivateKey)(validatedInput.signingPrivateKey);
   } catch {
-    fail('Input "signing-private-key" is not a valid private key');
+    throw new Error('Input "signing-private-key" is not a valid private key');
   }
-  if (privateKey.asymmetricKeyType !== "rsa") fail('Input "signing-private-key" must be an RSA private key');
-  const signature = `sig="${(0, import_node_crypto7.sign)("RSA-SHA256", manifestBody, privateKey).toString("base64")}", keyid="${input2.keyid}", alg="${SIGNING_ALGORITHM}"`;
+  if (privateKey.asymmetricKeyType !== "rsa") {
+    throw new Error('Input "signing-private-key" must be an RSA private key');
+  }
+  const signature = `sig="${(0, import_node_crypto7.sign)("RSA-SHA256", manifestBody, privateKey).toString("base64")}", keyid="${validatedInput.keyid}", alg="${SIGNING_ALGORITHM}"`;
   return {
     updateId,
     manifestUrl: `${publicTupleUrl}/manifest`,
@@ -50570,61 +50557,48 @@ async function prepareRelease(input2) {
     assets: [...uniqueAssets.values()]
   };
 }
-function s3Endpoint(accountId) {
-  return `https://${accountId}.r2.cloudflarestorage.com`;
-}
-function isPreconditionFailure(error52) {
-  if (typeof error52 !== "object" || error52 === null) return false;
-  const candidate = error52;
-  return candidate.name === "PreconditionFailed" || candidate.$metadata?.httpStatusCode === 412;
-}
-async function bodyDigest(body) {
-  if (!body || typeof body !== "object") fail("R2 read-back response had no body");
-  const hash2 = (0, import_node_crypto7.createHash)("sha256");
-  let size = 0;
-  for await (const chunk of body) {
-    const bytes = typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
-    hash2.update(bytes);
-    size += bytes.byteLength;
-  }
-  return { sha256Hex: hash2.digest("hex"), size };
-}
+
+// action/src/publish.ts
+var MANIFEST_CONTENT_TYPE = "application/expo+json";
 async function verifyObject(client, bucket, object2, signature) {
   const response = await client.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: object2.key }));
   if (response.ContentLength !== object2.body.byteLength || response.ContentType !== object2.contentType) {
-    fail(`R2 object verification failed for ${object2.key}`);
+    throw new Error(`R2 object verification failed for ${object2.key}`);
   }
   if (response.ContentEncoding && response.ContentEncoding.toLowerCase() !== "identity") {
-    fail(`R2 object verification found compressed content for ${object2.key}`);
+    throw new Error(`R2 object verification found compressed content for ${object2.key}`);
   }
   const storedSignature = Object.entries(response.Metadata ?? {}).find(([key]) => key.toLowerCase() === "signature")?.[1];
   if (signature !== void 0 && storedSignature !== signature) {
-    fail(`R2 manifest signature metadata verification failed for ${object2.key}`);
+    throw new Error(`R2 manifest signature metadata verification failed for ${object2.key}`);
   }
-  const digest3 = await bodyDigest(response.Body);
-  if (digest3.size !== object2.body.byteLength || digest3.sha256Hex !== object2.sha256Hex) {
-    fail(`R2 object body verification failed for ${object2.key}`);
+  if (!response.Body || typeof response.Body !== "object") throw new Error("R2 read-back response had no body");
+  const hash2 = (0, import_node_crypto8.createHash)("sha256");
+  let size = 0;
+  for await (const chunk of response.Body) {
+    const bytes = Buffer.from(chunk);
+    hash2.update(bytes);
+    size += bytes.byteLength;
+  }
+  if (size !== object2.body.byteLength || hash2.digest("hex") !== object2.sha256Hex) {
+    throw new Error(`R2 object body verification failed for ${object2.key}`);
   }
 }
-function createClient(input2) {
-  const client = new import_client_s3.S3Client({
-    endpoint: s3Endpoint(input2.r2AccountId),
+async function publishRelease(input2, client) {
+  const validatedInput = parseActionInputs(input2);
+  const transport = client ?? new import_client_s3.S3Client({
+    endpoint: `https://${validatedInput.r2AccountId}.r2.cloudflarestorage.com`,
     forcePathStyle: true,
     region: "auto",
     credentials: {
-      accessKeyId: input2.r2AccessKeyId,
-      secretAccessKey: input2.r2SecretAccessKey
+      accessKeyId: validatedInput.r2AccessKeyId,
+      secretAccessKey: validatedInput.r2SecretAccessKey
     }
   });
-  return {
-    send: (command5) => client.send(command5)
-  };
-}
-async function publishRelease(input2, client = createClient(input2)) {
-  const release2 = await prepareRelease(input2);
+  const release2 = await prepareRelease(validatedInput);
   for (const asset of release2.assets) {
     const command5 = new import_client_s3.PutObjectCommand({
-      Bucket: input2.r2Bucket,
+      Bucket: validatedInput.r2Bucket,
       Key: asset.key,
       Body: asset.body,
       ContentType: asset.contentType,
@@ -50632,11 +50606,12 @@ async function publishRelease(input2, client = createClient(input2)) {
       IfNoneMatch: "*"
     });
     try {
-      await client.send(command5);
+      await transport.send(command5);
     } catch (error52) {
-      if (!isPreconditionFailure(error52)) throw new Error(`R2 asset upload failed for ${asset.key}`);
+      const isPreconditionFailure = typeof error52 === "object" && error52 !== null && (error52.name === "PreconditionFailed" || error52.$metadata?.httpStatusCode === 412);
+      if (!isPreconditionFailure) throw new Error(`R2 asset upload failed for ${asset.key}`);
     }
-    await verifyObject(client, input2.r2Bucket, asset);
+    await verifyObject(transport, validatedInput.r2Bucket, asset);
   }
   const manifestHashes = hashObject(release2.manifestBody);
   const manifest = {
@@ -50645,9 +50620,9 @@ async function publishRelease(input2, client = createClient(input2)) {
     contentType: MANIFEST_CONTENT_TYPE,
     ...manifestHashes
   };
-  await client.send(
+  await transport.send(
     new import_client_s3.PutObjectCommand({
-      Bucket: input2.r2Bucket,
+      Bucket: validatedInput.r2Bucket,
       Key: release2.manifestKey,
       Body: release2.manifestBody,
       ContentType: MANIFEST_CONTENT_TYPE,
@@ -50655,17 +50630,17 @@ async function publishRelease(input2, client = createClient(input2)) {
       Metadata: { signature: release2.signature }
     })
   );
-  await verifyObject(client, input2.r2Bucket, manifest, release2.signature);
+  await verifyObject(transport, validatedInput.r2Bucket, manifest, release2.signature);
   return { updateId: release2.updateId, manifestUrl: release2.manifestUrl };
 }
+
+// action/src/index.ts
 function setActionOutput(name, value) {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) return;
   (0, import_node_fs3.appendFileSync)(outputPath, `${name}=${value}
 `, { encoding: "utf8", mode: 384 });
 }
-
-// action/src/index.ts
 async function main() {
   const result = await publishRelease(readActionInputs());
   setActionOutput("update-id", result.updateId);

@@ -1,0 +1,75 @@
+import { z } from "zod";
+
+const platformSchema = z.enum(["ios", "android"], {
+  error: 'Input "platform" must be ios or android',
+});
+const channelSchema = z.enum(["staging", "production"], {
+  error: 'Input "channel" must be staging or production',
+});
+const pathSegmentSchema = (name: string) =>
+  z.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    `Input "${name}" must be one non-empty path segment`,
+  );
+const projectSchema = pathSegmentSchema("project");
+const runtimeVersionSchema = pathSegmentSchema("runtime-version");
+const publicBaseUrlSchema = z
+  .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
+  .refine((value) => {
+    const url = new URL(value);
+    return !(url.username || url.password || url.search || url.hash);
+  }, 'Input "public-base-url" must not contain credentials, query, or fragment')
+  .transform((value) => value.replace(/\/+$/u, ""));
+const r2AccountIdSchema = z.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
+  error: 'Input "r2-account-id" contains invalid characters',
+});
+const keyidSchema = z.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
+  error: 'Input "keyid" must be an SFV token',
+});
+const actionInputsSchema = z.object({
+  exportDir: z.string().min(1),
+  project: projectSchema,
+  platform: platformSchema,
+  channel: channelSchema,
+  runtimeVersion: runtimeVersionSchema,
+  publicBaseUrl: publicBaseUrlSchema,
+  r2Bucket: z.string().min(1),
+  r2AccountId: r2AccountIdSchema,
+  r2AccessKeyId: z.string().min(1),
+  r2SecretAccessKey: z.string().min(1),
+  signingPrivateKey: z.string().min(1),
+  keyid: keyidSchema,
+});
+
+export type ActionInputs = z.infer<typeof actionInputsSchema>;
+
+function input(name: string, fallback?: string): string {
+  const value = process.env[`INPUT_${name.toUpperCase()}`];
+  const trimmed = value?.trim();
+  if (trimmed) return trimmed;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Missing required input "${name}"`);
+}
+
+export function parseActionInputs(value: unknown): ActionInputs {
+  const parsed = actionInputsSchema.safeParse(value);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Invalid Action inputs");
+  return parsed.data;
+}
+
+export function readActionInputs(): ActionInputs {
+  return parseActionInputs({
+    exportDir: input("export-dir"),
+    project: input("project"),
+    platform: input("platform"),
+    channel: input("channel"),
+    runtimeVersion: input("runtime-version"),
+    publicBaseUrl: input("public-base-url"),
+    r2Bucket: input("r2-bucket"),
+    r2AccountId: input("r2-account-id"),
+    r2AccessKeyId: input("r2-access-key-id"),
+    r2SecretAccessKey: input("r2-secret-access-key"),
+    signingPrivateKey: input("signing-private-key"),
+    keyid: input("keyid", "main"),
+  });
+}

@@ -1,10 +1,12 @@
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { prepareRelease, publishRelease, type ActionInputs, type S3Transport } from "../src/publish";
+import { type ActionInputs } from "../src/input";
+import { prepareRelease } from "../src/prepare";
+import { publishRelease, type S3Transport } from "../src/publish";
 
 const temporaryDirectories: string[] = [];
 
@@ -78,19 +80,37 @@ describe("Expo OTA publish action", () => {
     );
   });
 
-  it("rejects metadata paths that escape the export directory", async () => {
+  it.each([
+    ["traversal", "../bundle.hbc", "outside export-dir"],
+    ["symlink", "outside-link.hbc", "asset symlink outside export-dir"],
+  ] as const)("rejects %s paths that escape the export directory before any R2 write", async (_name, metadataPath, message) => {
     const fixtureData = await fixture();
+    if (metadataPath === "outside-link.hbc") {
+      const outsideDirectory = await mkdtemp(join(tmpdir(), "expo-ota-action-outside-"));
+      temporaryDirectories.push(outsideDirectory);
+      const outsideFile = join(outsideDirectory, "outside.hbc");
+      await writeFile(outsideFile, "outside bytes");
+      await symlink(outsideFile, join(fixtureData.directory, metadataPath));
+    }
     await writeFile(
       join(fixtureData.directory, "metadata.json"),
       JSON.stringify({
         version: 0,
         bundler: "metro",
-        fileMetadata: { ios: { bundle: "../bundle.hbc", assets: [] } },
+        fileMetadata: { ios: { bundle: metadataPath, assets: [] } },
       }),
     );
-    await expect(prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey))).rejects.toThrow(
-      "outside export-dir",
+    let writes = 0;
+    const client: S3Transport = {
+      async send(command) {
+        if (command.input.Body !== undefined) writes += 1;
+        return {};
+      },
+    };
+    await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), client)).rejects.toThrow(
+      message,
     );
+    expect(writes).toBe(0);
   });
 
   it("uses the requested project namespace for URLs and R2 keys", async () => {
@@ -130,6 +150,23 @@ describe("Expo OTA publish action", () => {
       ),
     ).rejects.toThrow('Input "project" must be one non-empty path segment');
     expect(writes).toBe(0);
+  });
+
+  it("does not treat inherited MIME names as known asset extensions", async () => {
+    const fixtureData = await fixture();
+    await writeFile(
+      join(fixtureData.directory, "metadata.json"),
+      JSON.stringify({
+        version: 0,
+        bundler: "metro",
+        fileMetadata: { ios: { bundle: "bundle.hbc", assets: [{ path: "logo.png", ext: "constructor" }] } },
+      }),
+    );
+    const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
+    const manifest = JSON.parse(release.manifestBody.toString("utf8")) as {
+      assets: Array<{ contentType: string }>;
+    };
+    expect(manifest.assets[0]?.contentType).toBe("application/octet-stream");
   });
 
   it("uploads immutable assets before replacing and verifying the fixed manifest", async () => {

@@ -1,4 +1,12 @@
-import { publishRelease, readActionInputs, setActionOutput } from "./publish";
+import { appendFileSync } from "node:fs";
+import { readActionInputs } from "./input";
+import { publishRelease } from "./publish";
+
+function setActionOutput(name: string, value: string): void {
+  const outputPath = process.env.GITHUB_OUTPUT;
+  if (!outputPath) return;
+  appendFileSync(outputPath, `${name}=${value}\n`, { encoding: "utf8", mode: 0o600 });
+}
 
 async function main(): Promise<void> {
   const result = await publishRelease(readActionInputs());
