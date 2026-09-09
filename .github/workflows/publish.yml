@@ -97,7 +97,7 @@ jobs:
           INPUT_PROJECT: ${{ inputs.project }}
           INPUT_PUBLIC-BASE-URL: ${{ vars.EXPO_OTA_PUBLIC_BASE_URL }}
           INPUT_R2-ACCESS-KEY-ID: ${{ steps.vault.outputs.R2_ACCESS_KEY_ID }}
-          INPUT_R2-ACCOUNT-ID: ${{ vars.EXPO_OTA_R2_ACCOUNT_ID }}
+          INPUT_R2-ACCOUNT-ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           INPUT_R2-BUCKET: ${{ vars.EXPO_OTA_R2_BUCKET }}
           INPUT_R2-SECRET-ACCESS-KEY: ${{ steps.vault.outputs.R2_SECRET_ACCESS_KEY }}
           INPUT_RUNTIME-VERSION: ${{ inputs.runtime_version }}
