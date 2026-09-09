@@ -4,10 +4,13 @@
   "description": "Read-only Expo Updates delivery on Cloudflare Workers and R2.",
   "private": true,
   "scripts": {
+    "build:action": "esbuild action/src/index.ts --bundle --format=cjs --platform=node --target=node24 --outfile=action/dist/index.cjs",
+    "check:action": "tsc --noEmit -p action/tsconfig.json",
     "check:types": "tsc --noEmit",
     "check:wrangler": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
     "test": "vitest run",
+    "test:action": "vitest run --config action/vitest.config.ts",
     "test:watch": "vitest",
     "types": "wrangler types --strict-vars=false"
   },
@@ -15,11 +18,14 @@
   "type": "module",
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.1.4",
+    "@types/node": "26.5.0",
+    "esbuild": "0.28.1",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
     "wrangler": "4.129.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1127.0",
     "@scure/base": "2.4.0",
     "structured-headers": "2.0.3"
   }
