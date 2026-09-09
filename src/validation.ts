@@ -18,46 +18,25 @@ const channelSchema = z.enum(["staging", "production"]);
 const runtimeSchema = z.string().min(1).regex(RUNTIME).refine((value) => value !== "." && value !== "..");
 const hashSchema = z.string().regex(SHA256_HEX);
 
-const routePrefix = [
-  z.literal(""),
-  z.literal("v1"),
-  z.literal("projects"),
-  z.literal(PROJECT),
-  z.literal("platforms"),
-  platformSchema,
-  z.literal("channels"),
-  channelSchema,
-  z.literal("runtimes"),
-  runtimeSchema,
-] as const;
-
-const manifestPathSchema = z
-  .tuple([...routePrefix, z.literal("manifest")])
-  .transform(([, , , , , platform, , channel, , runtime]) => ({
-    kind: "manifest" as const,
-    platform,
-    channel,
-    runtime,
-  }));
-const assetPathSchema = z
-  .tuple([...routePrefix, z.literal("assets"), hashSchema])
-  .transform(([, , , , , platform, , channel, , runtime, , hash]) => ({
-    kind: "asset" as const,
-    platform,
-    channel,
-    runtime,
-    hash,
-  }));
-
-export type ManifestRoute = z.infer<typeof manifestPathSchema>;
-export type AssetRoute = z.infer<typeof assetPathSchema>;
-export type Route = ManifestRoute | AssetRoute;
-
-export const manifestRequestHeadersSchema = z.object({
-  protocol: z.string(),
+const releaseParamsSchema = z.object({
   platform: platformSchema,
+  channel: channelSchema,
   runtime: runtimeSchema,
 });
+
+export const manifestParamsSchema = releaseParamsSchema;
+export const assetParamsSchema = releaseParamsSchema.extend({ hash: hashSchema });
+
+export type ManifestRoute = z.infer<typeof manifestParamsSchema>;
+export type AssetRoute = z.infer<typeof assetParamsSchema>;
+
+export const manifestRequestHeadersSchema = z.object({
+  "expo-protocol-version": z.literal(PROTOCOL_VERSION),
+  "expo-platform": platformSchema,
+  "expo-runtime-version": runtimeSchema,
+  "expo-expect-signature": z.string().optional(),
+});
+export type ManifestRequestHeaders = z.infer<typeof manifestRequestHeadersSchema>;
 
 export const contentTypeSchema = z
   .string()
@@ -78,25 +57,6 @@ export type SignatureExpectation = {
   keyid?: string;
   alg?: typeof SIGNING_ALGORITHM;
 };
-
-function decodePath(pathname: string): string[] | undefined {
-  try {
-    return pathname.split("/").map(decodeURIComponent);
-  } catch {
-    return undefined;
-  }
-}
-
-export function parseRoute(pathname: string): Route | undefined {
-  const segments = decodePath(pathname);
-  if (!segments) return undefined;
-
-  const manifest = manifestPathSchema.safeParse(segments);
-  if (manifest.success) return manifest.data;
-
-  const asset = assetPathSchema.safeParse(segments);
-  return asset.success ? asset.data : undefined;
-}
 
 export function manifestKey(route: Pick<ManifestRoute, "platform" | "channel" | "runtime">): string {
   return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`;
