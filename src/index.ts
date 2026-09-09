@@ -1,46 +1,19 @@
-import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
 import { getAsset, getManifest } from "./release";
-import {
-  assetParamsSchema,
-  manifestHeadersSchema,
-  manifestParamsSchema,
-  PROJECT,
-} from "./validation";
+import { parseRoute } from "./validation";
 
-const app = new Hono<{ Bindings: Env }>();
-const basePath = `/v1/projects/${PROJECT}/platforms/:platform/channels/:channel/runtimes/:runtime`;
-const manifestPath = `${basePath}/manifest`;
-const assetPath = `${basePath}/assets/:hash`;
+function notFound(): Response {
+  return Response.json({ error: "not found" }, { status: 404 });
+}
 
-app.use("*", async (c, next) => {
-  if (c.req.method !== "GET") return c.text("Method Not Allowed", 405);
-  return next();
-});
+const worker = {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
 
-app.get(
-  manifestPath,
-  zValidator("param", manifestParamsSchema, (result, c) => {
-    if (!result.success) return c.json({ error: "not found" }, 404);
-  }),
-  zValidator("header", manifestHeadersSchema, (result, c) => {
-    if (!result.success) return c.json({ error: "invalid request" }, 400);
-  }),
-  async (c) => {
-    return getManifest(c.req.raw, c.env, c.req.valid("param"), c.req.valid("header"));
+    const route = parseRoute(new URL(request.url).pathname);
+    if (!route) return notFound();
+    if (route.kind === "manifest") return getManifest(request, env, route);
+    return getAsset(route, env);
   },
-);
+} satisfies ExportedHandler<Env>;
 
-app.get(
-  assetPath,
-  zValidator("param", assetParamsSchema, (result, c) => {
-    if (!result.success) return c.json({ error: "not found" }, 404);
-  }),
-  async (c) => {
-    return getAsset(c.req.valid("param"), c.env);
-  },
-);
-
-app.notFound((c) => c.json({ error: "not found" }, 404));
-
-export default app;
+export default worker;

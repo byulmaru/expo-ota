@@ -1,53 +1,39 @@
-import { base64, base64urlnopad, hex } from "@scure/base";
+import { base64 } from "@scure/base";
 import { parseDictionary, type BareItem, type Dictionary } from "structured-headers";
-import { z } from "zod";
 
 export const PROJECT = "kosmo-native" as const;
 export const PROTOCOL_VERSION = "1" as const;
 export const SFV_VERSION = "0" as const;
 export const DEFAULT_MANIFEST_CACHE_CONTROL = "private, no-store";
 export const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
-export const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
+
 const MANIFEST_CONTENT_TYPES = new Set(["application/expo+json", "application/json"]);
 const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
-const SHA256_BASE64URL = /^[A-Za-z0-9_-]{43}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUNTIME = /^[^/\\\u0000-\u001f\u007f]+$/;
 const MIME_TYPE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-const platformSchema = z.enum(["ios", "android"]);
-const channelSchema = z.enum(["staging", "production"]);
-const runtimeSchema = z
-  .string()
-  .min(1)
-  .regex(RUNTIME)
-  .refine((value) => value !== "." && value !== "..");
+type Platform = "ios" | "android";
+type Channel = "staging" | "production";
 
-export const manifestParamsSchema = z.object({
-  platform: platformSchema,
-  channel: channelSchema,
-  runtime: runtimeSchema,
-});
+export type ManifestRoute = {
+  kind: "manifest";
+  platform: Platform;
+  channel: Channel;
+  runtime: string;
+};
 
-export const assetParamsSchema = manifestParamsSchema.extend({
-  hash: z.string().regex(SHA256_HEX),
-});
+export type AssetRoute = {
+  kind: "asset";
+  platform: Platform;
+  channel: Channel;
+  runtime: string;
+  hash: string;
+};
 
-export const manifestHeadersSchema = z.object({
-  "expo-protocol-version": z.string().optional(),
-  "expo-platform": z.string().optional(),
-  "expo-runtime-version": z.string().optional(),
-  accept: z.string().optional(),
-  "expo-expect-signature": z.string().optional(),
-});
-
-export type ManifestHeaders = z.infer<typeof manifestHeadersSchema>;
-export type ManifestRoute = z.infer<typeof manifestParamsSchema>;
-export type AssetRoute = z.infer<typeof assetParamsSchema>;
+export type Route = ManifestRoute | AssetRoute;
 
 export interface ParsedSignature {
-  sig: Uint8Array;
   keyid: string;
   alg: typeof SIGNING_ALGORITHM;
 }
@@ -57,44 +43,96 @@ export interface SignatureExpectation {
   alg?: typeof SIGNING_ALGORITHM;
 }
 
-const channelPointerSchema = z.object({
-  complete: z.literal(true),
-  manifestKey: z.string(),
-  signature: z.string(),
-  contentType: z.string(),
-});
-export type ChannelPointer = z.infer<typeof channelPointerSchema>;
-
-export function isContentType(value: unknown): value is string {
-  return typeof value === "string" && value.length <= 128 && MIME_TYPE.test(value);
-}
-
-const manifestAssetSchema = z.object({
-  hash: z.string().regex(SHA256_BASE64URL),
-  key: z.string().min(1),
-  contentType: z.string().refine(isContentType),
-  fileExtension: z.string().optional(),
-  url: z.string().min(1),
-});
-
-export const manifestSchema = z.object({
-  id: z.string().regex(UUID),
-  createdAt: z.string().refine((value) => value.length > 0 && Number.isFinite(Date.parse(value))),
-  runtimeVersion: z.string(),
-  launchAsset: manifestAssetSchema,
-  assets: z.array(manifestAssetSchema),
-  metadata: z.record(z.string(), z.string()),
-  extra: z.record(z.string(), z.unknown()),
-});
-export type ExpoManifest = z.infer<typeof manifestSchema>;
-
-export function decodeCanonicalBase64(value: string): Uint8Array | undefined {
+function decodeSegment(segment: string | undefined): string | undefined {
+  if (!segment) return undefined;
   try {
-    const decoded = base64.decode(value);
-    return base64.encode(decoded) === value ? decoded : undefined;
+    return decodeURIComponent(segment);
   } catch {
     return undefined;
   }
+}
+
+function isPlatform(value: string | undefined): value is Platform {
+  return value === "ios" || value === "android";
+}
+
+function isChannel(value: string | undefined): value is Channel {
+  return value === "staging" || value === "production";
+}
+
+function decodeRuntime(segment: string | undefined): string | undefined {
+  const runtime = decodeSegment(segment);
+  if (!runtime || runtime === "." || runtime === ".." || !RUNTIME.test(runtime)) return undefined;
+  return runtime;
+}
+
+export function parseRoute(pathname: string): Route | undefined {
+  const parts = pathname.split("/");
+  const [
+    ,
+    version,
+    projects,
+    project,
+    platforms,
+    platformSegment,
+    channels,
+    channelSegment,
+    runtimes,
+    runtimeSegment,
+    resource,
+    hashSegment,
+  ] = parts;
+  const platform = isPlatform(platformSegment) ? platformSegment : undefined;
+  const channel = isChannel(channelSegment) ? channelSegment : undefined;
+  const runtime = decodeRuntime(runtimeSegment);
+
+  if (
+    version !== "v1" ||
+    projects !== "projects" ||
+    project !== PROJECT ||
+    platforms !== "platforms" ||
+    !platform ||
+    channels !== "channels" ||
+    !channel ||
+    runtimes !== "runtimes" ||
+    !runtime
+  ) {
+    return undefined;
+  }
+
+  if (resource === "manifest" && parts.length === 11 && hashSegment === undefined) {
+    return { kind: "manifest", platform, channel, runtime };
+  }
+
+  const hash = decodeSegment(hashSegment);
+  if (resource === "assets" && parts.length === 12 && hash && SHA256_HEX.test(hash)) {
+    return { kind: "asset", platform, channel, runtime, hash };
+  }
+  return undefined;
+}
+
+export function manifestKey(route: Pick<ManifestRoute, "platform" | "channel" | "runtime">): string {
+  return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`;
+}
+
+export function assetKey(route: Pick<AssetRoute, "platform" | "channel" | "runtime" | "hash">): string {
+  return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`;
+}
+
+export function isContentType(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) return false;
+  const mediaType = value.split(";", 1)[0]?.trim() ?? "";
+  return MIME_TYPE.test(mediaType);
+}
+
+export function isUncompressed(value: unknown): boolean {
+  return value === undefined || value === "" || (typeof value === "string" && value.toLowerCase() === "identity");
+}
+
+export function isManifestContentType(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 128) return false;
+  const mediaType = value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  return MANIFEST_CONTENT_TYPES.has(mediaType);
 }
 
 function hasDuplicateDictionaryKeys(input: string): boolean {
@@ -140,6 +178,15 @@ function getSfvItem(dictionary: Dictionary, key: string): { value: BareItem; par
   return { value: item[0] as BareItem, parameters: item[1] as Map<string, BareItem> };
 }
 
+export function decodeCanonicalBase64(value: string): Uint8Array | undefined {
+  try {
+    const decoded = base64.decode(value);
+    return base64.encode(decoded) === value ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseSignature(value: unknown): ParsedSignature | undefined {
   if (typeof value !== "string") return undefined;
   const dictionary = parseSfvDictionary(value);
@@ -159,13 +206,12 @@ export function parseSignature(value: unknown): ParsedSignature | undefined {
     !alg ||
     alg.parameters.size !== 0 ||
     typeof alg.value !== "string" ||
-    alg.value !== SIGNING_ALGORITHM
+    alg.value !== SIGNING_ALGORITHM ||
+    !decodeCanonicalBase64(signature.value)?.length
   ) {
     return undefined;
   }
-  const sig = decodeCanonicalBase64(signature.value);
-  if (!sig || sig.length === 0) return undefined;
-  return { sig, keyid: keyid.value, alg: alg.value };
+  return { keyid: keyid.value, alg: SIGNING_ALGORITHM };
 }
 
 export function parseSignatureExpectation(value: string): SignatureExpectation | undefined {
@@ -193,83 +239,34 @@ export function parseSignatureExpectation(value: string): SignatureExpectation |
   };
 }
 
-export function parsePointer(value: unknown, route: ManifestRoute): ChannelPointer | undefined {
-  const result = channelPointerSchema.safeParse(value);
-  if (!result.success) return undefined;
-  const prefix = `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/`;
-  const manifestPrefix = `${prefix}manifests/`;
-  const { manifestKey } = result.data;
-  if (
-    !MANIFEST_CONTENT_TYPES.has(result.data.contentType.split(";", 1)[0]!.trim().toLowerCase()) ||
-    (manifestKey !== `${prefix}manifest.json` &&
-      (!manifestKey.startsWith(manifestPrefix) ||
-        manifestKey.slice(manifestPrefix.length).length === 0 ||
-        manifestKey.slice(manifestPrefix.length).includes("/")))
-  ) {
-    return undefined;
-  }
-  return result.data;
-}
+export function accepts(contentType: string, accept: string | undefined): boolean {
+  if (!accept) return true;
 
-function parseAssetPath(url: URL): AssetRoute | undefined {
-  const parts = url.pathname.split("/");
-  if (
-    parts.length !== 12 ||
-    parts[1] !== "v1" ||
-    parts[2] !== "projects" ||
-    parts[3] !== PROJECT ||
-    parts[4] !== "platforms" ||
-    parts[6] !== "channels" ||
-    parts[8] !== "runtimes" ||
-    parts[10] !== "assets"
-  ) {
-    return undefined;
-  }
-  let runtime: string;
-  let hash: string;
-  try {
-    runtime = decodeURIComponent(parts[9]!);
-    hash = decodeURIComponent(parts[11]!);
-  } catch {
-    return undefined;
-  }
-  const result = assetParamsSchema.safeParse({ platform: parts[5], channel: parts[7], runtime, hash });
-  return result.success ? result.data : undefined;
-}
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  if (!mediaType || !mediaType.includes("/")) return false;
 
-export function validateAssetReferences(manifest: ExpoManifest, route: ManifestRoute, requestUrl: URL): boolean {
-  if (manifest.runtimeVersion !== route.runtime) return false;
-  for (const asset of [manifest.launchAsset, ...manifest.assets]) {
-    if (!SHA256_BASE64URL.test(asset.hash)) return false;
-    let routeHash: Uint8Array;
-    try {
-      routeHash = base64urlnopad.decode(asset.hash);
-      if (base64urlnopad.encode(routeHash) !== asset.hash) return false;
-    } catch {
-      return false;
+  let bestSpecificity = -1;
+  let bestQuality = 0;
+  for (const entry of accept.split(",")) {
+    const [rawCandidate, ...parameters] = entry.trim().toLowerCase().split(";");
+    const candidate = rawCandidate?.trim() ?? "";
+    if (!candidate) continue;
+    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+    let qualityValue = 1;
+    if (quality) {
+      qualityValue = Number(quality.trim().slice(2));
+      if (!Number.isFinite(qualityValue) || qualityValue < 0) continue;
     }
-    if (routeHash.byteLength !== 32) return false;
-    const hash = hex.encode(routeHash);
 
-    let assetUrl: URL;
-    try {
-      assetUrl = new URL(asset.url, requestUrl);
-    } catch {
-      return false;
-    }
-    const assetRoute = parseAssetPath(assetUrl);
-    if (
-      !assetRoute ||
-      assetUrl.origin !== requestUrl.origin ||
-      assetUrl.search ||
-      assetUrl.hash ||
-      assetRoute.platform !== route.platform ||
-      assetRoute.channel !== route.channel ||
-      assetRoute.runtime !== route.runtime ||
-      assetRoute.hash !== hash
-    ) {
-      return false;
+    const specificity =
+      candidate === mediaType ? 2 : candidate === `${mediaType.split("/", 1)[0]}/*` ? 1 : candidate === "*/*" ? 0 : -1;
+    if (specificity < 0) continue;
+    if (specificity > bestSpecificity) {
+      bestSpecificity = specificity;
+      bestQuality = qualityValue;
+    } else if (specificity === bestSpecificity) {
+      bestQuality = Math.max(bestQuality, qualityValue);
     }
   }
-  return true;
+  return bestSpecificity >= 0 && bestQuality > 0;
 }
