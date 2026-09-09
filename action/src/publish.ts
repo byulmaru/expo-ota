@@ -7,37 +7,64 @@ import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { z } from "zod";
 
 const PROJECT = "kosmo-native" as const;
 const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 const MANIFEST_CONTENT_TYPE = "application/expo+json" as const;
 
-export type Platform = "ios" | "android";
-export type Channel = "staging" | "production";
+const platformSchema = z.enum(["ios", "android"], {
+  error: 'Input "platform" must be ios or android',
+});
+const channelSchema = z.enum(["staging", "production"], {
+  error: 'Input "channel" must be staging or production',
+});
+const runtimeVersionSchema = z.string().min(1).refine(
+  (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+  'Input "runtime-version" must be one non-empty path segment',
+);
+const publicBaseUrlSchema = z
+  .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
+  .refine((value) => {
+    const url = new URL(value);
+    return !(url.username || url.password || url.search || url.hash);
+  }, 'Input "public-base-url" must not contain credentials, query, or fragment')
+  .transform((value) => value.replace(/\/+$/u, ""));
+const r2AccountIdSchema = z.string().min(1).regex(/^[A-Za-z0-9-]+$/u, {
+  error: 'Input "r2-account-id" contains invalid characters',
+});
+const keyidSchema = z.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
+  error: 'Input "keyid" must be an SFV token',
+});
+const actionInputsSchema = z.object({
+  exportDir: z.string().min(1),
+  platform: platformSchema,
+  channel: channelSchema,
+  runtimeVersion: runtimeVersionSchema,
+  publicBaseUrl: publicBaseUrlSchema,
+  r2Bucket: z.string().min(1),
+  r2AccountId: r2AccountIdSchema,
+  r2AccessKeyId: z.string().min(1),
+  r2SecretAccessKey: z.string().min(1),
+  signingPrivateKey: z.string().min(1),
+  keyid: keyidSchema,
+});
 
-export interface ActionInputs {
-  exportDir: string;
-  platform: Platform;
-  channel: Channel;
-  runtimeVersion: string;
-  publicBaseUrl: string;
-  r2Bucket: string;
-  r2AccountId: string;
-  r2AccessKeyId: string;
-  r2SecretAccessKey: string;
-  signingPrivateKey: string;
-  keyid: string;
-}
+const exportAssetSchema = z.object({ path: z.string(), ext: z.string() });
+const platformMetadataSchema = z.object({
+  bundle: z.string().min(1),
+  assets: z.array(exportAssetSchema),
+});
+const exportMetadataSchema = z.object({
+  version: z.literal(0),
+  bundler: z.literal("metro"),
+  fileMetadata: z.record(z.string(), z.unknown()),
+});
 
-interface ExportAsset {
-  path: string;
-  ext: string;
-}
-
-interface PlatformMetadata {
-  bundle: string;
-  assets: ExportAsset[];
-}
+export type Platform = z.infer<typeof platformSchema>;
+export type Channel = z.infer<typeof channelSchema>;
+export type ActionInputs = z.infer<typeof actionInputsSchema>;
+type ExportAsset = z.infer<typeof exportAssetSchema>;
 
 export interface PreparedObject {
   key: string;
@@ -117,71 +144,34 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function input(name: string, fallback?: string): string {
+  const value = process.env[`INPUT_${name.toUpperCase()}`];
+  const trimmed = value?.trim();
+  if (trimmed) return trimmed;
+  if (fallback !== undefined) return fallback;
+  fail(`Missing required input "${name}"`);
 }
 
-function requiredInput(name: string): string {
-  const key = name.toUpperCase();
-  const value = process.env[`INPUT_${key}`] ?? process.env[`INPUT_${key.replaceAll("-", "_")}`];
-  if (!value?.trim()) fail(`Missing required input "${name}"`);
-  return value.trim();
-}
-
-function optionalInput(name: string, fallback: string): string {
-  const key = name.toUpperCase();
-  const value = process.env[`INPUT_${key}`] ?? process.env[`INPUT_${key.replaceAll("-", "_")}`];
-  return value?.trim() || fallback;
+function parseActionInputs(value: unknown): ActionInputs {
+  const parsed = actionInputsSchema.safeParse(value);
+  if (!parsed.success) fail(parsed.error.issues[0]?.message ?? "Invalid Action inputs");
+  return parsed.data;
 }
 
 export function readActionInputs(): ActionInputs {
-  const platform = requiredInput("platform");
-  const channel = requiredInput("channel");
-  if (platform !== "ios" && platform !== "android") fail("Input \"platform\" must be ios or android");
-  if (channel !== "staging" && channel !== "production") {
-    fail("Input \"channel\" must be staging or production");
-  }
-
-  return {
-    exportDir: requiredInput("export-dir"),
-    platform,
-    channel,
-    runtimeVersion: requiredInput("runtime-version"),
-    publicBaseUrl: requiredInput("public-base-url"),
-    r2Bucket: requiredInput("r2-bucket"),
-    r2AccountId: requiredInput("r2-account-id"),
-    r2AccessKeyId: requiredInput("r2-access-key-id"),
-    r2SecretAccessKey: requiredInput("r2-secret-access-key"),
-    signingPrivateKey: requiredInput("signing-private-key"),
-    keyid: optionalInput("keyid", "main"),
-  };
-}
-
-function validateRuntime(runtimeVersion: string): void {
-  if (
-    !runtimeVersion ||
-    runtimeVersion === "." ||
-    runtimeVersion === ".." ||
-    /[\\/\u0000-\u001f\u007f]/u.test(runtimeVersion)
-  ) {
-    fail("Input \"runtime-version\" must be one non-empty path segment");
-  }
-}
-
-function normalizeBaseUrl(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    fail("Input \"public-base-url\" must be an absolute HTTP(S) URL");
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    fail("Input \"public-base-url\" must be an absolute HTTP(S) URL");
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    fail("Input \"public-base-url\" must not contain credentials, query, or fragment");
-  }
-  return value.replace(/\/+$/u, "");
+  return parseActionInputs({
+    exportDir: input("export-dir"),
+    platform: input("platform"),
+    channel: input("channel"),
+    runtimeVersion: input("runtime-version"),
+    publicBaseUrl: input("public-base-url"),
+    r2Bucket: input("r2-bucket"),
+    r2AccountId: input("r2-account-id"),
+    r2AccessKeyId: input("r2-access-key-id"),
+    r2SecretAccessKey: input("r2-secret-access-key"),
+    signingPrivateKey: input("signing-private-key"),
+    keyid: input("keyid", "main"),
+  });
 }
 
 function normalizeExportPath(exportRoot: string, metadataPath: string): string {
@@ -228,23 +218,11 @@ async function readMetadata(exportRoot: string): Promise<Record<string, unknown>
   } catch {
     fail("metadata.json is not valid JSON");
   }
-  if (!isRecord(parsed) || parsed.version !== 0 || parsed.bundler !== "metro" || !isRecord(parsed.fileMetadata)) {
+  const validated = exportMetadataSchema.safeParse(parsed);
+  if (!validated.success) {
     fail("Only Expo Metro metadata.json version 0 exports are supported");
   }
-  return parsed.fileMetadata;
-}
-
-function validatePlatformMetadata(value: unknown): PlatformMetadata {
-  if (!isRecord(value) || typeof value.bundle !== "string" || !value.bundle || !Array.isArray(value.assets)) {
-    fail("metadata.json has no valid export for the selected platform");
-  }
-  const assets = value.assets.map((asset) => {
-    if (!isRecord(asset) || typeof asset.path !== "string" || typeof asset.ext !== "string") {
-      fail("metadata.json contains an invalid asset entry");
-    }
-    return { path: asset.path, ext: asset.ext };
-  });
-  return { bundle: value.bundle, assets };
+  return validated.data.fileMetadata;
 }
 
 function extensionForMetadata(ext: string): string | undefined {
@@ -256,7 +234,7 @@ function extensionForMetadata(ext: string): string | undefined {
 
 function contentTypeForExtension(ext: string): string {
   const normalized = ext.replace(/^\./u, "").toLowerCase();
-  return MIME_TYPES[normalized] ?? "application/octet-stream";
+  return Object.hasOwn(MIME_TYPES, normalized) ? MIME_TYPES[normalized]! : "application/octet-stream";
 }
 
 function hashObject(
@@ -272,45 +250,13 @@ function hashObject(
   };
 }
 
-function assetUrl(baseUrl: string, platform: Platform, channel: Channel, runtimeVersion: string, hash: string): string {
-  return `${baseUrl}/v1/projects/${PROJECT}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtimeVersion)}/assets/${hash}`;
-}
-
-function manifestUrl(baseUrl: string, platform: Platform, channel: Channel, runtimeVersion: string): string {
-  return `${baseUrl}/v1/projects/${PROJECT}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtimeVersion)}/manifest`;
-}
-
-function releasePrefix(platform: Platform, channel: Channel, runtimeVersion: string): string {
-  return `releases/${PROJECT}/${platform}/${channel}/${runtimeVersion}`;
-}
-
-function escapeSfvString(value: string): string {
-  if (!/^[A-Za-z0-9*._-]+$/u.test(value)) fail("Input \"keyid\" must be an SFV token");
-  return value;
-}
-
-function signatureForManifest(manifestBody: Buffer, privateKeyPem: string, keyid: string): string {
-  let privateKey;
-  try {
-    privateKey = createPrivateKey(privateKeyPem);
-  } catch {
-    fail("Input \"signing-private-key\" is not a valid private key");
-  }
-  if (privateKey.asymmetricKeyType !== "rsa") fail("Input \"signing-private-key\" must be an RSA private key");
-  const signature = sign("RSA-SHA256", manifestBody, privateKey).toString("base64");
-  return `sig="${signature}", keyid="${escapeSfvString(keyid)}", alg="${SIGNING_ALGORITHM}"`;
-}
-
-async function prepareAsset(
+async function prepareFile(
   exportRoot: string,
   metadataAsset: ExportAsset,
-  baseUrl: string,
-  platform: Platform,
-  channel: Channel,
-  runtimeVersion: string,
+  assetBaseUrl: string,
   prefix: string,
   contentType: string,
-): Promise<PreparedObject & { fileExtension?: string; hashBase64Url: string; keyHex: string; url: string }> {
+): Promise<PreparedObject & { fileExtension?: string; url: string }> {
   const filePath = await resolveExportFile(exportRoot, metadataAsset.path);
   const body = await readFile(filePath);
   const hashes = hashObject(body);
@@ -321,48 +267,36 @@ async function prepareAsset(
     contentType,
     ...hashes,
     fileExtension,
-    hashBase64Url: hashes.sha256Base64Url,
-    keyHex: hashes.md5Hex,
-    url: assetUrl(baseUrl, platform, channel, runtimeVersion, hashes.sha256Hex),
+    url: `${assetBaseUrl}/${hashes.sha256Hex}`,
   };
 }
 
 export async function prepareRelease(input: ActionInputs): Promise<PreparedRelease> {
-  validateRuntime(input.runtimeVersion);
-  const baseUrl = normalizeBaseUrl(input.publicBaseUrl);
-  if (!input.r2Bucket || !input.r2AccountId || !input.r2AccessKeyId || !input.r2SecretAccessKey) {
-    fail("R2 bucket and credentials must not be empty");
-  }
+  input = parseActionInputs(input);
+  const baseUrl = input.publicBaseUrl;
+  const publicTupleUrl = `${baseUrl}/v1/projects/${PROJECT}/platforms/${input.platform}/channels/${input.channel}/runtimes/${encodeURIComponent(input.runtimeVersion)}`;
+  const assetBaseUrl = `${publicTupleUrl}/assets`;
+  const prefix = `releases/${PROJECT}/${input.platform}/${input.channel}/${input.runtimeVersion}`;
   const exportRoot = resolve(input.exportDir);
   const metadata = await readMetadata(exportRoot);
-  const platformMetadata = validatePlatformMetadata(metadata[input.platform]);
-  const prefix = releasePrefix(input.platform, input.channel, input.runtimeVersion);
+  const platformMetadata = platformMetadataSchema.safeParse(metadata[input.platform]);
+  if (!platformMetadata.success) fail("metadata.json has no valid export for the selected platform");
 
-  const launchPath = await resolveExportFile(exportRoot, platformMetadata.bundle);
-  const launchBody = await readFile(launchPath);
-  const launchHashes = hashObject(launchBody);
-  const launch = {
-    key: `${prefix}/assets/${launchHashes.sha256Hex}`,
-    body: launchBody,
-    contentType: "application/javascript",
-    ...launchHashes,
-    fileExtension: undefined,
-    hashBase64Url: launchHashes.sha256Base64Url,
-    keyHex: launchHashes.md5Hex,
-    url: assetUrl(baseUrl, input.platform, input.channel, input.runtimeVersion, launchHashes.sha256Hex),
-  };
-
+  const launch = await prepareFile(
+    exportRoot,
+    { path: platformMetadata.data.bundle, ext: "" },
+    assetBaseUrl,
+    prefix,
+    "application/javascript",
+  );
   const assets = [
     launch,
     ...(await Promise.all(
-      platformMetadata.assets.map((asset) =>
-        prepareAsset(
+      platformMetadata.data.assets.map((asset) =>
+        prepareFile(
           exportRoot,
           asset,
-          baseUrl,
-          input.platform,
-          input.channel,
-          input.runtimeVersion,
+          assetBaseUrl,
           prefix,
           contentTypeForExtension(asset.ext),
         ),
@@ -385,14 +319,14 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     createdAt,
     runtimeVersion: input.runtimeVersion,
     launchAsset: {
-      hash: launch.hashBase64Url,
-      key: launch.keyHex,
+      hash: launch.sha256Base64Url,
+      key: launch.md5Hex,
       contentType: launch.contentType,
       url: launch.url,
     },
     assets: assets.slice(1).map((asset) => ({
-      hash: asset.hashBase64Url,
-      key: asset.keyHex,
+      hash: asset.sha256Base64Url,
+      key: asset.md5Hex,
       contentType: asset.contentType,
       ...(asset.fileExtension ? { fileExtension: asset.fileExtension } : {}),
       url: asset.url,
@@ -401,10 +335,17 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     extra: {},
   };
   const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
-  const signature = signatureForManifest(manifestBody, input.signingPrivateKey, input.keyid);
+  let privateKey;
+  try {
+    privateKey = createPrivateKey(input.signingPrivateKey);
+  } catch {
+    fail("Input \"signing-private-key\" is not a valid private key");
+  }
+  if (privateKey.asymmetricKeyType !== "rsa") fail("Input \"signing-private-key\" must be an RSA private key");
+  const signature = `sig="${sign("RSA-SHA256", manifestBody, privateKey).toString("base64")}", keyid="${input.keyid}", alg="${SIGNING_ALGORITHM}"`;
   return {
     updateId,
-    manifestUrl: manifestUrl(baseUrl, input.platform, input.channel, input.runtimeVersion),
+    manifestUrl: `${publicTupleUrl}/manifest`,
     manifestKey: `${prefix}/manifest.json`,
     manifestBody,
     signature,
@@ -413,19 +354,13 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
 }
 
 function s3Endpoint(accountId: string): string {
-  if (!/^[A-Za-z0-9-]+$/u.test(accountId)) fail("Input \"r2-account-id\" contains invalid characters");
   return `https://${accountId}.r2.cloudflarestorage.com`;
 }
 
 function isPreconditionFailure(error: unknown): boolean {
-  if (!isRecord(error)) return false;
-  return error.name === "PreconditionFailed" || error.$metadata !== undefined && isRecord(error.$metadata) && error.$metadata.httpStatusCode === 412;
-}
-
-function metadataValue(metadata: Record<string, string> | undefined, name: string): string | undefined {
-  if (!metadata) return undefined;
-  const entry = Object.entries(metadata).find(([key]) => key.toLowerCase() === name.toLowerCase());
-  return entry?.[1];
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
+  return candidate.name === "PreconditionFailed" || candidate.$metadata?.httpStatusCode === 412;
 }
 
 async function bodyDigest(body: unknown): Promise<{ sha256Hex: string; size: number }> {
@@ -453,7 +388,8 @@ async function verifyObject(
   if (response.ContentEncoding && response.ContentEncoding.toLowerCase() !== "identity") {
     fail(`R2 object verification found compressed content for ${object.key}`);
   }
-  if (signature !== undefined && metadataValue(response.Metadata, "signature") !== signature) {
+  const storedSignature = Object.entries(response.Metadata ?? {}).find(([key]) => key.toLowerCase() === "signature")?.[1];
+  if (signature !== undefined && storedSignature !== signature) {
     fail(`R2 manifest signature metadata verification failed for ${object.key}`);
   }
   const digest = await bodyDigest(response.Body);
