@@ -4,14 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { type ActionInputs } from "../src/input";
+import { parseActionInputs, type ActionInputs } from "../src/input";
 import { prepareRelease } from "../src/prepare";
 import { publishRelease, type S3Transport } from "../src/publish";
 
 const temporaryDirectories: string[] = [];
 
-function inputs(exportDir: string, privateKey: string): ActionInputs {
-  return {
+function inputs(
+  exportDir: string,
+  privateKey: string,
+  overrides: Partial<Pick<ActionInputs, "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
+): ActionInputs {
+  return parseActionInputs({
     exportDir,
     project: "kosmo-native",
     platform: "ios",
@@ -21,7 +25,8 @@ function inputs(exportDir: string, privateKey: string): ActionInputs {
     r2SecretAccessKey: "secret",
     signingPrivateKey: privateKey,
     keyid: "main",
-  };
+    ...overrides,
+  });
 }
 
 async function fixture(): Promise<{ directory: string; privateKey: string; publicKey: string }> {
@@ -71,6 +76,64 @@ afterEach(async () => {
 });
 
 describe("Expo OTA publish action", () => {
+  it("uses service defaults and accepts validated overrides", () => {
+    const defaults = parseActionInputs({
+      exportDir: "export",
+      project: "kosmo-native",
+      platform: "ios",
+      channel: "staging",
+      runtimeVersion: "fingerprint test",
+      r2AccessKeyId: "access",
+      r2SecretAccessKey: "secret",
+      signingPrivateKey: "private-key",
+      keyid: "main",
+    });
+    expect(defaults.publicBaseUrl).toBe("https://expo-ota.byulmaru.co");
+    expect(defaults.r2Bucket).toBe("expo-ota");
+    expect(defaults.r2AccountId).toBe("676a2d8e52515abd22c0edda7364cf73");
+
+    const overrides = parseActionInputs({
+      ...defaults,
+      publicBaseUrl: "https://updates.example.test/",
+      r2Bucket: "custom-releases",
+      r2AccountId: "custom-account",
+    });
+    expect(overrides.publicBaseUrl).toBe("https://updates.example.test");
+    expect(overrides.r2Bucket).toBe("custom-releases");
+    expect(overrides.r2AccountId).toBe("custom-account");
+  });
+
+  it("rejects unsafe service overrides before preparing a release", () => {
+    expect(() => parseActionInputs({
+      exportDir: "export",
+      project: "kosmo-native",
+      platform: "ios",
+      channel: "staging",
+      runtimeVersion: "fingerprint test",
+      publicBaseUrl: "https://updates.example.test/?token=unsafe",
+      r2Bucket: "custom-releases",
+      r2AccountId: "custom/account",
+      r2AccessKeyId: "access",
+      r2SecretAccessKey: "secret",
+      signingPrivateKey: "private-key",
+      keyid: "main",
+    })).toThrow('Input "public-base-url" must not contain credentials, query, or fragment');
+    expect(() => parseActionInputs({
+      exportDir: "export",
+      project: "kosmo-native",
+      platform: "ios",
+      channel: "staging",
+      runtimeVersion: "fingerprint test",
+      publicBaseUrl: "https://updates.example.test",
+      r2Bucket: "custom-releases",
+      r2AccountId: "custom/account",
+      r2AccessKeyId: "access",
+      r2SecretAccessKey: "secret",
+      signingPrivateKey: "private-key",
+      keyid: "main",
+    })).toThrow('Input "r2-account-id" contains invalid characters');
+  });
+
   it("builds tuple-scoped manifest bytes and signs those exact bytes", async () => {
     const fixtureData = await fixture();
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
@@ -247,9 +310,16 @@ describe("Expo OTA publish action", () => {
         };
       },
     };
-    const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey);
+    const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey, {
+      publicBaseUrl: "https://updates.example.test/",
+      r2Bucket: "custom-releases",
+      r2AccountId: "custom-account",
+    });
     const first = await publishRelease(actionInputs, fakeClient);
-    const firstManifest = storage.get(`expo-ota:${manifestObjectKey}`);
+    expect(first.manifestUrl).toBe(
+      "https://updates.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
+    );
+    const firstManifest = storage.get(`custom-releases:${manifestObjectKey}`);
     expect(firstManifest?.cacheControl).toBe("private, no-store");
     expect(firstManifest?.contentType).toMatch(/^multipart\/mixed; boundary=/u);
     const storedManifestPart = firstManifest
@@ -258,16 +328,16 @@ describe("Expo OTA publish action", () => {
     expect(storedManifestPart?.headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
     );
-    const firstAssetPuts = events.filter((event) => event.startsWith(`put:expo-ota:${assetObjectPrefix}`));
+    const firstAssetPuts = events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`));
     expect(firstAssetPuts).toHaveLength(2);
-    const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`expo-ota:${assetObjectPrefix}`));
+    const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`custom-releases:${assetObjectPrefix}`));
     expect(assetObjects).toHaveLength(2);
     expect(assetObjects.every(([, object]) => object.cacheControl === "public, max-age=31536000, immutable")).toBe(true);
-    expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["expo-ota"]));
-    const firstManifestPut = events.findIndex((event) => event === `put:expo-ota:${manifestObjectKey}`);
+    expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["custom-releases"]));
+    const firstManifestPut = events.findIndex((event) => event === `put:custom-releases:${manifestObjectKey}`);
     const lastAssetRead = Math.max(
       ...events
-        .map((event, index) => (event.startsWith(`get:expo-ota:${assetObjectPrefix}`) ? index : -1))
+        .map((event, index) => (event.startsWith(`get:custom-releases:${assetObjectPrefix}`) ? index : -1))
         .filter((index) => index >= 0),
     );
     expect(firstManifestPut).toBeGreaterThan(lastAssetRead);
@@ -275,8 +345,8 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     const second = await publishRelease(actionInputs, fakeClient);
     expect(second.updateId).not.toBe(first.updateId);
-    expect(events.filter((event) => event.startsWith(`put:expo-ota:${assetObjectPrefix}`))).toHaveLength(0);
-    const secondManifest = storage.get(`expo-ota:${manifestObjectKey}`);
+    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(0);
+    const secondManifest = storage.get(`custom-releases:${manifestObjectKey}`);
     expect(secondManifest).toBeDefined();
     expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
@@ -285,6 +355,6 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     corruptAssetReads = true;
     await expect(publishRelease(actionInputs, fakeClient)).rejects.toThrow("R2 object body verification failed");
-    expect(events.some((event) => event === `put:expo-ota:${manifestObjectKey}`)).toBe(false);
+    expect(events.some((event) => event === `put:custom-releases:${manifestObjectKey}`)).toBe(false);
   });
 });

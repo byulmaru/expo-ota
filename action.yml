@@ -18,6 +18,18 @@ inputs:
   runtime-version:
     description: Native runtime version served by this update
     required: true
+  public-base-url:
+    description: Public base URL of the static Expo OTA CDN or R2 origin
+    required: false
+    default: https://expo-ota.byulmaru.co
+  r2-bucket:
+    description: Cloudflare R2 bucket containing the static manifest and immutable assets
+    required: false
+    default: expo-ota
+  r2-account-id:
+    description: Cloudflare account ID used by the R2 S3 endpoint
+    required: false
+    default: 676a2d8e52515abd22c0edda7364cf73
   r2-access-key-id:
     description: R2 S3 access key ID
     required: true

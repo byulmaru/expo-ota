@@ -66,6 +66,10 @@ Call the private Action from a workflow in the application repository. The calle
     platform: ios
     channel: staging
     runtime-version: '1.0.0'
+    # Optional service inputs; these are the defaults.
+    public-base-url: https://expo-ota.byulmaru.co
+    r2-bucket: expo-ota
+    r2-account-id: 676a2d8e52515abd22c0edda7364cf73
     r2-access-key-id: ${{ secrets.EXPO_OTA_R2_ACCESS_KEY_ID }}
     r2-secret-access-key: ${{ secrets.EXPO_OTA_R2_SECRET_ACCESS_KEY }}
     signing-private-key: ${{ secrets.EXPO_OTA_SIGNING_PRIVATE_KEY }}
@@ -76,13 +80,13 @@ Call the private Action from a workflow in the application repository. The calle
 
 ### Inputs and outputs
 
-The required inputs are `export-dir`, `project`, `platform`, `channel`, `runtime-version`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. The Action always publishes to the configured `https://expo-ota.byulmaru.co` origin and the `expo-ota` R2 bucket. The R2 access key ID, secret access key, and signing key are publishing credentials; provide them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional and fixed when the manifest is published.
+The required inputs are `export-dir`, `project`, `platform`, `channel`, `runtime-version`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. The optional service inputs default to `public-base-url=https://expo-ota.byulmaru.co`, `r2-bucket=expo-ota`, and `r2-account-id=676a2d8e52515abd22c0edda7364cf73`; explicit overrides are accepted and validated. The R2 access key ID, secret access key, and signing key are publishing credentials; provide them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional and fixed when the manifest is published.
 
 The Action returns `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest). A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded, the fixed multipart manifest object was written, and the published object was read back successfully. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
 
 The generated manifest deliberately uses `metadata: {}` and `extra: {}`. It does not populate `extra.expoClient`, so on a remote update `Constants.expoConfig` is `null` in SDK 56. Callers that depend on Expo config through `Constants.expoConfig` are outside this Action's current compatibility contract; they must keep that configuration in the bundle or wait for an explicitly approved public-config artifact extension.
 
-The manifest URL uses `https://expo-ota.byulmaru.co` followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Every launch and asset URL uses the same origin followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/assets/{sha256}` key. The Action writes immutable assets with `public, max-age=31536000, immutable` and writes the static multipart manifest with `private, no-store`.
+The manifest URL uses the resolved `public-base-url` (default `https://expo-ota.byulmaru.co`) followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Every launch and asset URL uses the same resolved origin followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/assets/{sha256}` key. The Action writes to the resolved `r2-bucket` (default `expo-ota`) and writes immutable assets with `public, max-age=31536000, immutable` plus the static multipart manifest with `private, no-store`.
 
 ### Export artifact contract
 
