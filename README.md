@@ -42,13 +42,14 @@ This repository has no production deployment, live R2, or device-application pro
 
 ## GitHub Action publisher
 
-Call the private Action from a workflow in the application repository. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same release tuple before invoking this Action.
+Call the private Action from a workflow in the application repository. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same `(project, platform, channel, runtimeVersion)` tuple before invoking this Action.
 
 ```yaml
 - name: Publish Expo OTA update
   uses: byulmaru/expo-ota@<ACTION_COMMIT_SHA>
   with:
     export-dir: .artifacts/expo-export
+    project: kosmo-native
     platform: ios
     channel: staging
     runtime-version: '1.0.0'
@@ -61,11 +62,11 @@ Call the private Action from a workflow in the application repository. The calle
     keyid: main
 ```
 
-`platform` accepts `ios` or `android`; `channel` accepts `staging` or `production`. The project namespace is fixed to `kosmo-native` by this contract. `keyid` is optional and defaults to `main`.
+`platform` accepts `ios` or `android`; `channel` accepts `staging` or `production`; `project` is a required non-empty path segment such as `kosmo-native`. `keyid` is optional and defaults to `main`. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
 
 ### Inputs and outputs
 
-The required inputs are `export-dir`, `platform`, `channel`, `runtime-version`, `public-base-url`, `r2-bucket`, `r2-account-id`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. The R2 account ID, access-key ID, and secret access key are publishing credentials, and the signing key is a PEM-encoded RSA private key; provide all of them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional.
+The required inputs are `export-dir`, `project`, `platform`, `channel`, `runtime-version`, `public-base-url`, `r2-bucket`, `r2-account-id`, `r2-access-key-id`, `r2-secret-access-key`, and `signing-private-key`. The R2 account ID, access-key ID, and secret access key are publishing credentials, and the signing key is a PEM-encoded RSA private key; provide all of them as protected GitHub secrets or environment secrets and never commit them to the calling repository. `keyid` is optional.
 
 The Action returns `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest). A successful run means the export was validated, its manifest was signed, assets were uploaded, the fixed manifest object was written with the matching signature metadata, and the published object was read back successfully. It does not mean that a native binary was built or that a device has applied the update.
 

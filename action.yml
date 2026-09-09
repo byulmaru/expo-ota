@@ -6,6 +6,9 @@ inputs:
   export-dir:
     description: Directory containing the approved Expo export and metadata.json
     required: true
+  project:
+    description: Project namespace used in public URLs and R2 keys
+    required: true
   platform:
     description: Expo platform in the export to publish
     required: true

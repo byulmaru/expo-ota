@@ -11,6 +11,7 @@ const temporaryDirectories: string[] = [];
 function inputs(exportDir: string, privateKey: string): ActionInputs {
   return {
     exportDir,
+    project: "kosmo-native",
     platform: "ios",
     channel: "staging",
     runtimeVersion: "fingerprint test",
@@ -90,6 +91,45 @@ describe("Expo OTA publish action", () => {
     await expect(prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey))).rejects.toThrow(
       "outside export-dir",
     );
+  });
+
+  it("uses the requested project namespace for URLs and R2 keys", async () => {
+    const fixtureData = await fixture();
+    const release = await prepareRelease({
+      ...inputs(fixtureData.directory, fixtureData.privateKey),
+      project: "another native",
+    });
+    expect(release.manifestUrl).toBe(
+      "https://ota.example.test/v1/projects/another%20native/platforms/ios/channels/staging/runtimes/fingerprint%20test/manifest",
+    );
+    expect(release.manifestKey).toBe(
+      "releases/another native/ios/staging/fingerprint test/manifest.json",
+    );
+    expect(release.assets.every((asset) => asset.key.startsWith("releases/another native/"))).toBe(true);
+    const manifest = JSON.parse(release.manifestBody.toString("utf8")) as {
+      launchAsset: { url: string };
+      assets: Array<{ url: string }>;
+    };
+    expect(manifest.launchAsset.url).toContain("/projects/another%20native/");
+    expect(manifest.assets[0]?.url).toContain("/projects/another%20native/");
+  });
+
+  it("rejects an unsafe project before writing to R2", async () => {
+    const fixtureData = await fixture();
+    let writes = 0;
+    const client: S3Transport = {
+      async send(command) {
+        if (command.input.Body !== undefined) writes += 1;
+        return {};
+      },
+    };
+    await expect(
+      publishRelease(
+        { ...inputs(fixtureData.directory, fixtureData.privateKey), project: "../other" },
+        client,
+      ),
+    ).rejects.toThrow('Input "project" must be one non-empty path segment');
+    expect(writes).toBe(0);
   });
 
   it("uploads immutable assets before replacing and verifying the fixed manifest", async () => {

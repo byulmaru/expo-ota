@@ -9,7 +9,6 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 
-const PROJECT = "kosmo-native" as const;
 const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 const MANIFEST_CONTENT_TYPE = "application/expo+json" as const;
 
@@ -19,10 +18,13 @@ const platformSchema = z.enum(["ios", "android"], {
 const channelSchema = z.enum(["staging", "production"], {
   error: 'Input "channel" must be staging or production',
 });
-const runtimeVersionSchema = z.string().min(1).refine(
-  (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
-  'Input "runtime-version" must be one non-empty path segment',
-);
+const pathSegmentSchema = (name: string) =>
+  z.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
+    `Input "${name}" must be one non-empty path segment`,
+  );
+const projectSchema = pathSegmentSchema("project");
+const runtimeVersionSchema = pathSegmentSchema("runtime-version");
 const publicBaseUrlSchema = z
   .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
   .refine((value) => {
@@ -38,6 +40,7 @@ const keyidSchema = z.string().min(1).regex(/^[A-Za-z0-9*._-]+$/u, {
 });
 const actionInputsSchema = z.object({
   exportDir: z.string().min(1),
+  project: projectSchema,
   platform: platformSchema,
   channel: channelSchema,
   runtimeVersion: runtimeVersionSchema,
@@ -161,6 +164,7 @@ function parseActionInputs(value: unknown): ActionInputs {
 export function readActionInputs(): ActionInputs {
   return parseActionInputs({
     exportDir: input("export-dir"),
+    project: input("project"),
     platform: input("platform"),
     channel: input("channel"),
     runtimeVersion: input("runtime-version"),
@@ -274,9 +278,9 @@ async function prepareFile(
 export async function prepareRelease(input: ActionInputs): Promise<PreparedRelease> {
   input = parseActionInputs(input);
   const baseUrl = input.publicBaseUrl;
-  const publicTupleUrl = `${baseUrl}/v1/projects/${PROJECT}/platforms/${input.platform}/channels/${input.channel}/runtimes/${encodeURIComponent(input.runtimeVersion)}`;
+  const publicTupleUrl = `${baseUrl}/v1/projects/${encodeURIComponent(input.project)}/platforms/${input.platform}/channels/${input.channel}/runtimes/${encodeURIComponent(input.runtimeVersion)}`;
   const assetBaseUrl = `${publicTupleUrl}/assets`;
-  const prefix = `releases/${PROJECT}/${input.platform}/${input.channel}/${input.runtimeVersion}`;
+  const prefix = `releases/${input.project}/${input.platform}/${input.channel}/${input.runtimeVersion}`;
   const exportRoot = resolve(input.exportDir);
   const metadata = await readMetadata(exportRoot);
   const platformMetadata = platformMetadataSchema.safeParse(metadata[input.platform]);
