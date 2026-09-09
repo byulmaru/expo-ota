@@ -9,7 +9,7 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "types": "wrangler types"
+    "types": "wrangler types --strict-vars=false"
   },
   "packageManager": "pnpm@11.22.0",
   "type": "module",
@@ -18,5 +18,11 @@
     "typescript": "7.0.2",
     "vitest": "4.1.11",
     "wrangler": "4.129.0"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.1",
+    "hono": "^4.13.7",
+    "structured-headers": "2.0.3",
+    "zod": "4.4.3"
   }
 }
