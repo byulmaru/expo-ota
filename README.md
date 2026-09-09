@@ -6,7 +6,7 @@ The legacy Expo OTA Worker deployment was deleted on 2026-09-09; its custom doma
 
 As of 2026-09-09, the R2 custom domain `expo-ota.byulmaru.co` is configured/enabled and DNS is R2-proxied. UI configuration shows manifest cache bypass active. An independent edge check verified TLS, static routing, and manifest-only `expo-protocol-version: 1` / `expo-sfv-version: 0` headers; the empty R2 bucket (0 B) correctly returned an HTML 404 with `cf-cache-status: DYNAMIC`, which does not prove positive manifest cache behavior. No real release has returned HTTP 200 or produced signature, asset, or device-application proof.
 
-The Action must receive an already-built, approved export from the calling repository. The calling workflow owns the approved commit, environment approval, and concurrency guard for the `(project, platform, channel, runtimeVersion)` tuple. Keep the Action reference pinned to an immutable commit until a reviewed release of this private repository exists; the examples below intentionally use `<ACTION_COMMIT_SHA>` because no `v1` reference exists yet.
+The Action must receive an already-built, approved export from the calling repository. The calling workflow owns the approved commit and any environment approval; the reusable publisher workflow serializes publishes for the `(project, platform, channel, runtimeVersion)` tuple. Keep the Action reference pinned to an immutable commit until a reviewed release of this private repository exists; the examples below intentionally use `<ACTION_COMMIT_SHA>` because no `v1` reference exists yet.
 
 ## Static object paths and response contract
 
@@ -52,6 +52,29 @@ Publisher CI owns the release proof: it validates the export, hashes every asset
 The channel is part of the asset URL in this contract. Promoting a manifest between `staging` and `production` therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
 
 Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. It does not delete old assets. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
+
+## Reusable Vault publisher workflow
+
+Application repositories should call the reusable workflow after exporting and uploading the approved export artifact. The caller passes only the artifact name, release tuple, and its app-owned signing key. The workflow joins the existing private Tailnet, authenticates to Vault with GitHub OIDC, reads only the R2 access key fields from `secret/data/expo-ota/r2`, downloads the caller artifact, and invokes the pinned Action. It does not inherit all caller secrets; `signing_private_key` remains an explicit app-owned workflow secret.
+
+The Vault role is intentionally restricted to the `byulmaru/kosmo` caller on `refs/heads/main` and this reusable workflow at its reviewed `main` ref. The workflow's Action implementation is pinned independently to the reviewed Action commit.
+
+```yaml
+jobs:
+  publish-ota:
+    needs: export
+    uses: byulmaru/expo-ota/.github/workflows/publish.yml@refs/heads/main
+    with:
+      artifact_name: expo-ota-export
+      project: kosmo-native
+      platform: ios
+      channel: production
+      runtime_version: '1.0.0'
+    secrets:
+      signing_private_key: ${{ secrets.EXPO_OTA_SIGNING_PRIVATE_KEY }}
+```
+
+The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source and for passing the app-specific signing key; it does not receive or store the shared R2 credentials.
 
 ## GitHub Action publisher
 

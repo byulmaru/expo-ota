@@ -1,0 +1,88 @@
+name: Publish Expo OTA release
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: Artifact containing the approved Expo export directory contents
+        required: true
+        type: string
+      project:
+        description: Project namespace used in the OTA object tuple
+        required: true
+        type: string
+      platform:
+        description: Expo platform in the export
+        required: true
+        type: string
+      channel:
+        description: OTA channel to publish
+        required: true
+        type: string
+      runtime_version:
+        description: Native runtime version served by this update
+        required: true
+        type: string
+      keyid:
+        default: main
+        description: Expo Updates signing key identifier
+        required: false
+        type: string
+    secrets:
+      signing_private_key:
+        description: App-owned PEM encoded RSA private key used for Expo Updates signing
+        required: true
+
+jobs:
+  publish:
+    name: Publish Expo OTA release
+    runs-on: ubuntu-24.04
+    concurrency:
+      cancel-in-progress: false
+      group: expo-ota-${{ inputs.project }}-${{ inputs.platform }}-${{ inputs.channel }}-${{ inputs.runtime_version }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download approved Expo export
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .artifacts/expo-export
+
+      - name: Connect to Tailscale for Vault
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          audience: ${{ vars.TAILSCALE_AUDIENCE }}
+          oauth-client-id: ${{ vars.TAILSCALE_OAUTH_CLIENT_ID }}
+          tags: tag:github-actions
+
+      - name: Read R2 credentials from Vault
+        id: vault
+        uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
+        with:
+          exportEnv: false
+          jwtGithubAudience: ${{ vars.VAULT_GITHUB_ACTIONS_AUDIENCE }}
+          method: jwt
+          path: github-actions
+          role: expo-ota-publish
+          secrets: |
+            secret/data/expo-ota/r2 access_key_id | R2_ACCESS_KEY_ID ;
+            secret/data/expo-ota/r2 secret_access_key | R2_SECRET_ACCESS_KEY
+          url: ${{ vars.VAULT_ADDR }}
+
+      - name: Publish Expo OTA update
+        id: publish
+        uses: byulmaru/expo-ota@06558bb4151660c7aca56c87c55457c67329146e
+        with:
+          channel: ${{ inputs.channel }}
+          export-dir: .artifacts/expo-export
+          keyid: ${{ inputs.keyid }}
+          platform: ${{ inputs.platform }}
+          project: ${{ inputs.project }}
+          r2-access-key-id: ${{ steps.vault.outputs.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ steps.vault.outputs.R2_SECRET_ACCESS_KEY }}
+          runtime-version: ${{ inputs.runtime_version }}
+          signing-private-key: ${{ secrets.signing_private_key }}
