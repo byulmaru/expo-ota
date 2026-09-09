@@ -17,18 +17,14 @@ const channelSchema = z.enum(["staging", "production"]);
 const pathSegmentSchema = z.string().min(1).regex(PATH_SEGMENT).refine((value) => value !== "." && value !== "..");
 const hashSchema = z.string().regex(SHA256_HEX);
 
-const releaseParamsSchema = z.object({
+export const manifestParamsSchema = z.object({
   project: pathSegmentSchema,
   platform: platformSchema,
   channel: channelSchema,
   runtime: pathSegmentSchema,
 });
 
-export const manifestParamsSchema = releaseParamsSchema;
-export const assetParamsSchema = releaseParamsSchema.extend({ hash: hashSchema });
-
-export type ManifestRoute = z.infer<typeof manifestParamsSchema>;
-export type AssetRoute = z.infer<typeof assetParamsSchema>;
+export const assetParamsSchema = manifestParamsSchema.extend({ hash: hashSchema });
 
 export const manifestRequestHeadersSchema = z.object({
   "expo-protocol-version": z.literal(PROTOCOL_VERSION),
@@ -36,7 +32,6 @@ export const manifestRequestHeadersSchema = z.object({
   "expo-runtime-version": pathSegmentSchema,
   "expo-expect-signature": z.string().optional(),
 });
-export type ManifestRequestHeaders = z.infer<typeof manifestRequestHeadersSchema>;
 
 export const contentTypeSchema = z
   .string()
@@ -57,14 +52,6 @@ export type SignatureExpectation = {
   keyid?: string;
   alg?: typeof SIGNING_ALGORITHM;
 };
-
-export function manifestKey(route: Pick<ManifestRoute, "project" | "platform" | "channel" | "runtime">): string {
-  return `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`;
-}
-
-export function assetKey(route: Pick<AssetRoute, "project" | "platform" | "channel" | "runtime" | "hash">): string {
-  return `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`;
-}
 
 const emptyParametersSchema = z.instanceof(Map).refine((parameters) => parameters.size === 0);
 const signatureSchema = z
