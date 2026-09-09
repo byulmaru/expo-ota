@@ -179,6 +179,26 @@ describe("Expo OTA Worker", () => {
     expect(response.status).toBe(404);
   });
 
+  it("uses structured-fields last-member semantics for duplicate keys", async () => {
+    const release = await seedManifest({
+      signature: `sig="c2lnbmF0dXJl", keyid="ignored", keyid="main", alg="${ALGORITHM}"`,
+    });
+    const response = await fetchWorker(manifestPath(release.runtime), {
+      headers: manifestHeaders(release.runtime, `sig, keyid="main", alg="${ALGORITHM}"`),
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("passes through a nonempty signature value without decoding it", async () => {
+    const signature = `sig="not-base64", keyid="main", alg="${ALGORITHM}"`;
+    const release = await seedManifest({ signature });
+    const response = await fetchWorker(manifestPath(release.runtime), {
+      headers: manifestHeaders(release.runtime),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("expo-signature")).toBe(signature);
+  });
+
   it("fails closed for a missing or unsupported manifest content type", async () => {
     const missingRuntime = nextRuntime();
     await env.RELEASES.put(manifestKey(missingRuntime), "manifest", {

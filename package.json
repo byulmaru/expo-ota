@@ -20,7 +20,7 @@
     "wrangler": "4.129.0"
   },
   "dependencies": {
-    "@scure/base": "2.4.0",
-    "structured-headers": "2.0.3"
+    "structured-headers": "2.0.3",
+    "zod": "4.4.3"
   }
 }

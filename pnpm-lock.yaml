@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@scure/base':
-        specifier: 2.4.0
-        version: 2.4.0
       structured-headers:
         specifier: 2.0.3
         version: 2.0.3
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: 1.1.4
@@ -528,9 +528,6 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
-
-  '@scure/base@2.4.0':
-    resolution: {integrity: sha512-thZ1TuJwFwBblOhgsjDKvvGirBxNp+wSvY/DR6tJBJOTDhdAAcHJ8Vbr2eFnqaxeca4+t0i9KBf+uHYGWwZORg==}
 
   '@sindresorhus/is@7.2.0':
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
@@ -1369,8 +1366,6 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
-
-  '@scure/base@2.4.0': {}
 
   '@sindresorhus/is@7.2.0': {}
 
