@@ -2,7 +2,7 @@
 
 This private repository contains the reusable GitHub Action that validates, signs, and publishes an approved Expo export as a static `multipart/mixed` manifest and immutable assets in one R2 bucket. The Action does not build the app, serve HTTP requests, or select a native runtime.
 
-The legacy Expo OTA Worker deployment remains available for rollback, but its custom domain is detached and no `/v1/...` path is active. This README records the static endpoint's configured routing/header state, not full static-host validation or device-application proof.
+The legacy Expo OTA Worker deployment was deleted on 2026-09-09; its custom domain is detached and no `/v1/...` path is active. Recovery would require an explicit redeploy from Git history and is not automatic. This README records the static endpoint's configured routing/header state, not full static-host validation or device-application proof.
 
 As of 2026-09-09, the R2 custom domain `expo-ota.byulmaru.co` is configured/enabled and DNS is R2-proxied. UI configuration shows manifest cache bypass active. An independent edge check verified TLS, static routing, and manifest-only `expo-protocol-version: 1` / `expo-sfv-version: 0` headers; the empty R2 bucket (0 B) correctly returned an HTML 404 with `cf-cache-status: DYNAMIC`, which does not prove positive manifest cache behavior. No real release has returned HTTP 200 or produced signature, asset, or device-application proof.
 
@@ -13,7 +13,7 @@ The Action must receive an already-built, approved export from the calling repos
 - `GET /releases/{project}/{platform}/{channel}/{runtime}/manifest.json`
 - `GET /releases/{project}/{platform}/{channel}/{runtime}/assets/{lowercase-sha256-hex}`
 
-The Action writes these prospective static objects; it does not add routes to the legacy Worker. The route tuple maps directly to these keys:
+The Action writes these prospective static objects directly to R2. Serving them requires the configured public host. The route tuple maps directly to these keys:
 
 ```text
 releases/{project}/{platform}/{channel}/{runtime}/manifest.json
@@ -112,4 +112,4 @@ CI=true pnpm test:action
 CI=true pnpm build:action
 ```
 
-`pnpm test:action` covers the publisher tests, and `pnpm check:action` type-checks its Node 24 source. `pnpm build:action` creates the packaged Node 24 Action entrypoint at `action/dist/index.cjs`; the generated bundle is required by `action.yml` and must be included in the Action release. Publishing still requires the caller's explicit workflow invocation, protected secrets, static-host configuration, and release approval; local development commands do not deploy the legacy Worker or publish a release.
+`pnpm test:action` covers the publisher tests, and `pnpm check:action` type-checks its Node 24 source. `pnpm build:action` creates the packaged Node 24 Action entrypoint at `action/dist/index.cjs`; the generated bundle is required by `action.yml` and must be included in the Action release. Publishing still requires the caller's explicit workflow invocation, protected secrets, static-host configuration, and release approval; local development commands do not deploy a Worker or publish a release.
