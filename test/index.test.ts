@@ -31,20 +31,20 @@ async function sha256(value: string): Promise<{ base64Url: string; hex: string }
   };
 }
 
-function releasePrefix(runtime: string, platform = PLATFORM, channel = CHANNEL): string {
-  return `releases/${PROJECT}/${platform}/${channel}/${runtime}`;
+function releasePrefix(runtime: string, platform = PLATFORM, channel = CHANNEL, project = PROJECT): string {
+  return `releases/${project}/${platform}/${channel}/${runtime}`;
 }
 
-function manifestKey(runtime: string, platform = PLATFORM, channel = CHANNEL): string {
-  return `${releasePrefix(runtime, platform, channel)}/manifest.json`;
+function manifestKey(runtime: string, platform = PLATFORM, channel = CHANNEL, project = PROJECT): string {
+  return `${releasePrefix(runtime, platform, channel, project)}/manifest.json`;
 }
 
-function manifestPath(runtime: string, platform = PLATFORM, channel = CHANNEL): string {
-  return `/v1/projects/${PROJECT}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtime)}/manifest`;
+function manifestPath(runtime: string, platform = PLATFORM, channel = CHANNEL, project = PROJECT): string {
+  return `/v1/projects/${encodeURIComponent(project)}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtime)}/manifest`;
 }
 
-function assetPath(runtime: string, hash: string, platform = PLATFORM, channel = CHANNEL): string {
-  return `/v1/projects/${PROJECT}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtime)}/assets/${hash}`;
+function assetPath(runtime: string, hash: string, platform = PLATFORM, channel = CHANNEL, project = PROJECT): string {
+  return `/v1/projects/${encodeURIComponent(project)}/platforms/${platform}/channels/${channel}/runtimes/${encodeURIComponent(runtime)}/assets/${hash}`;
 }
 
 function manifestHeaders(runtime: string, expectation?: string): HeadersInit {
@@ -70,6 +70,7 @@ async function fetchWorker(path: string, init?: RequestInit, workerEnv = testEnv
 }
 
 interface SeedManifestOptions {
+  project?: string;
   runtime?: string;
   body?: string;
   signature?: string;
@@ -78,18 +79,19 @@ interface SeedManifestOptions {
 }
 
 async function seedManifest(options: SeedManifestOptions = {}) {
+  const project = options.project ?? PROJECT;
   const runtime = options.runtime ?? nextRuntime();
   const body = options.body ?? `manifest bytes for ${runtime}\n`;
   const signature = options.signature ?? SIGNATURE;
   const contentType = options.contentType ?? "application/expo+json";
-  await env.RELEASES.put(manifestKey(runtime), body, {
+  await env.RELEASES.put(manifestKey(runtime, PLATFORM, CHANNEL, project), body, {
     httpMetadata: {
       contentType,
       ...(options.contentEncoding === undefined ? {} : { contentEncoding: options.contentEncoding }),
     },
     ...(signature === undefined ? {} : { customMetadata: { signature } }),
   });
-  return { runtime, body, signature, contentType, prefix: releasePrefix(runtime) };
+  return { project, runtime, body, signature, contentType, prefix: releasePrefix(runtime, PLATFORM, CHANNEL, project) };
 }
 
 describe("Expo OTA Worker", () => {
@@ -214,6 +216,55 @@ describe("Expo OTA Worker", () => {
     const release = await seedManifest();
     const response = await fetchWorker(manifestPath(release.runtime, "android", "production"), {
       headers: { ...manifestHeaders(release.runtime), "expo-platform": "android" },
+    });
+    expect(response.status).toBe(404);
+  });
+
+  it("keeps project namespaces isolated for manifests and assets", async () => {
+    const runtime = nextRuntime();
+    const first = await seedManifest({ project: "kosmo-native", runtime, body: "first project manifest" });
+    const second = await seedManifest({ project: "another project", runtime, body: "second project manifest" });
+
+    const firstManifest = await fetchWorker(manifestPath(runtime, PLATFORM, CHANNEL, first.project), {
+      headers: manifestHeaders(runtime),
+    });
+    const secondManifest = await fetchWorker(manifestPath(runtime, PLATFORM, CHANNEL, second.project), {
+      headers: manifestHeaders(runtime),
+    });
+
+    expect(await firstManifest.text()).toBe(first.body);
+    expect(await secondManifest.text()).toBe(second.body);
+
+    const firstAssetBody = "first project asset";
+    const secondAssetBody = "second project asset";
+    const firstAsset = await sha256(firstAssetBody);
+    const secondAsset = await sha256(secondAssetBody);
+    await env.RELEASES.put(`${first.prefix}/assets/${firstAsset.hex}`, firstAssetBody, {
+      httpMetadata: { contentType: "application/javascript" },
+    });
+    await env.RELEASES.put(`${second.prefix}/assets/${secondAsset.hex}`, secondAssetBody, {
+      httpMetadata: { contentType: "application/javascript" },
+    });
+
+    const firstAssetResponse = await fetchWorker(
+      assetPath(runtime, firstAsset.hex, PLATFORM, CHANNEL, first.project),
+    );
+    const secondAssetResponse = await fetchWorker(
+      assetPath(runtime, secondAsset.hex, PLATFORM, CHANNEL, second.project),
+    );
+    const crossProjectAssetResponse = await fetchWorker(
+      assetPath(runtime, firstAsset.hex, PLATFORM, CHANNEL, second.project),
+    );
+
+    expect(await firstAssetResponse.text()).toBe(firstAssetBody);
+    expect(await secondAssetResponse.text()).toBe(secondAssetBody);
+    expect(crossProjectAssetResponse.status).toBe(404);
+  });
+
+  it.each(["..", "../other", "project/name"])("rejects unsafe project path segment %s", async (project) => {
+    const runtime = nextRuntime();
+    const response = await fetchWorker(manifestPath(runtime, PLATFORM, CHANNEL, project), {
+      headers: manifestHeaders(runtime),
     });
     expect(response.status).toBe(404);
   });

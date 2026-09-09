@@ -1,7 +1,6 @@
 import { parseDictionary } from "structured-headers";
 import { z } from "zod";
 
-export const PROJECT = "kosmo-native" as const;
 export const PROTOCOL_VERSION = "1" as const;
 export const SFV_VERSION = "0" as const;
 export const DEFAULT_MANIFEST_CACHE_CONTROL = "private, no-store";
@@ -10,18 +9,19 @@ export const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const MANIFEST_CONTENT_TYPES = new Set(["application/expo+json", "application/json"]);
 const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
-const RUNTIME = /^[^/\\\u0000-\u001f\u007f]+$/;
+const PATH_SEGMENT = /^[^/\\\u0000-\u001f\u007f]+$/;
 const MIME_TYPE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 const platformSchema = z.enum(["ios", "android"]);
 const channelSchema = z.enum(["staging", "production"]);
-const runtimeSchema = z.string().min(1).regex(RUNTIME).refine((value) => value !== "." && value !== "..");
+const pathSegmentSchema = z.string().min(1).regex(PATH_SEGMENT).refine((value) => value !== "." && value !== "..");
 const hashSchema = z.string().regex(SHA256_HEX);
 
 const releaseParamsSchema = z.object({
+  project: pathSegmentSchema,
   platform: platformSchema,
   channel: channelSchema,
-  runtime: runtimeSchema,
+  runtime: pathSegmentSchema,
 });
 
 export const manifestParamsSchema = releaseParamsSchema;
@@ -33,7 +33,7 @@ export type AssetRoute = z.infer<typeof assetParamsSchema>;
 export const manifestRequestHeadersSchema = z.object({
   "expo-protocol-version": z.literal(PROTOCOL_VERSION),
   "expo-platform": platformSchema,
-  "expo-runtime-version": runtimeSchema,
+  "expo-runtime-version": pathSegmentSchema,
   "expo-expect-signature": z.string().optional(),
 });
 export type ManifestRequestHeaders = z.infer<typeof manifestRequestHeadersSchema>;
@@ -58,12 +58,12 @@ export type SignatureExpectation = {
   alg?: typeof SIGNING_ALGORITHM;
 };
 
-export function manifestKey(route: Pick<ManifestRoute, "platform" | "channel" | "runtime">): string {
-  return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`;
+export function manifestKey(route: Pick<ManifestRoute, "project" | "platform" | "channel" | "runtime">): string {
+  return `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/manifest.json`;
 }
 
-export function assetKey(route: Pick<AssetRoute, "platform" | "channel" | "runtime" | "hash">): string {
-  return `releases/${PROJECT}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`;
+export function assetKey(route: Pick<AssetRoute, "project" | "platform" | "channel" | "runtime" | "hash">): string {
+  return `releases/${route.project}/${route.platform}/${route.channel}/${route.runtime}/assets/${route.hash}`;
 }
 
 const emptyParametersSchema = z.instanceof(Map).refine((parameters) => parameters.size === 0);
