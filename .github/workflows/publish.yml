@@ -36,6 +36,7 @@ on:
 jobs:
   publish:
     name: Publish Expo OTA release
+    if: github.repository_owner_id == '29172280'
     runs-on: ubuntu-24.04
     concurrency:
       cancel-in-progress: false
@@ -46,6 +47,20 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout trusted publisher
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 1
+          path: .publisher
+          persist-credentials: false
+          ref: refs/heads/main
+          repository: byulmaru/expo-ota
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
       - name: Download approved Expo export
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -64,27 +79,27 @@ jobs:
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
         with:
           exportEnv: false
-          jwtGithubAudience: https://vault.tail1fdd55.ts.net
+          jwtGithubAudience: ${{ vars.VAULT_ADDR }}
           method: jwt
           path: github-actions
           role: expo-ota-publish
           secrets: |
             secret/data/expo-ota/r2 access_key_id | R2_ACCESS_KEY_ID ;
             secret/data/expo-ota/r2 secret_access_key | R2_SECRET_ACCESS_KEY
-          url: https://vault.tail1fdd55.ts.net
+          url: ${{ vars.VAULT_ADDR }}
 
       - name: Publish Expo OTA update
-        uses: byulmaru/expo-ota@d0d65208bd8302be6e95b6a616bfa3f113d22b19
-        with:
-          channel: ${{ inputs.channel }}
-          export-dir: .artifacts/expo-export
-          keyid: ${{ inputs.keyid }}
-          platform: ${{ inputs.platform }}
-          project: ${{ inputs.project }}
-          public-base-url: https://expo-ota.byulmaru.co
-          r2-account-id: 676a2d8e52515abd22c0edda7364cf73
-          r2-bucket: expo-ota
-          r2-access-key-id: ${{ steps.vault.outputs.R2_ACCESS_KEY_ID }}
-          r2-secret-access-key: ${{ steps.vault.outputs.R2_SECRET_ACCESS_KEY }}
-          runtime-version: ${{ inputs.runtime_version }}
-          signing-private-key: ${{ secrets.signing_private_key }}
+        env:
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_EXPORT-DIR: .artifacts/expo-export
+          INPUT_KEYID: ${{ inputs.keyid }}
+          INPUT_PLATFORM: ${{ inputs.platform }}
+          INPUT_PROJECT: ${{ inputs.project }}
+          INPUT_PUBLIC-BASE-URL: ${{ vars.EXPO_OTA_PUBLIC_BASE_URL }}
+          INPUT_R2-ACCESS-KEY-ID: ${{ steps.vault.outputs.R2_ACCESS_KEY_ID }}
+          INPUT_R2-ACCOUNT-ID: ${{ vars.EXPO_OTA_R2_ACCOUNT_ID }}
+          INPUT_R2-BUCKET: ${{ vars.EXPO_OTA_R2_BUCKET }}
+          INPUT_R2-SECRET-ACCESS-KEY: ${{ steps.vault.outputs.R2_SECRET_ACCESS_KEY }}
+          INPUT_RUNTIME-VERSION: ${{ inputs.runtime_version }}
+          INPUT_SIGNING-PRIVATE-KEY: ${{ secrets.signing_private_key }}
+        run: node .publisher/action/dist/index.cjs
