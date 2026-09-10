@@ -103,7 +103,7 @@ describe("Expo OTA publish action", () => {
     expect(custom.r2AccountId).toBe("custom-account");
   });
 
-  it.each(["dev", "prod"] as const)("accepts %s and isolates tuple paths", async (channel) => {
+  it.each(["dev", "prod", "preview-123"] as const)("accepts %s and isolates tuple paths", async (channel) => {
     const fixtureData = await fixture();
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey, { channel }));
     const publicObjectPath = `releases/kosmo-native/ios/${channel}/fingerprint%20test`;
@@ -113,6 +113,15 @@ describe("Expo OTA publish action", () => {
     expect(release.manifestKey).toBe(`${storageKeyPrefix}/manifest.json`);
     expect(release.assets.every((asset) => asset.key.startsWith(`${storageKeyPrefix}/assets/`))).toBe(true);
   });
+
+  it.each([".", "..", "preview/123", "preview 123", "preview?123"] as const)(
+    "rejects channel %j that is not a safe path segment",
+    (channel) => {
+      expect(() => inputs("export", "private-key", { channel })).toThrow(
+        'Input "channel" must be one safe path segment',
+      );
+    },
+  );
 
   it("rejects unsafe service overrides before preparing a release", () => {
     expect(() => parseActionInputs({

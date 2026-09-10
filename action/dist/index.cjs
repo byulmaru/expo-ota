@@ -50303,9 +50303,10 @@ var actionInputsSchema = external_exports.object({
   platform: external_exports.enum(["ios", "android"], {
     error: 'Input "platform" must be ios or android'
   }),
-  channel: external_exports.enum(["dev", "prod", "staging", "production"], {
-    error: 'Input "channel" must be dev, prod, staging, or production'
-  }),
+  channel: external_exports.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && /^[A-Za-z0-9._-]+$/u.test(value),
+    'Input "channel" must be one safe path segment'
+  ),
   runtimeVersion: external_exports.string().min(1).refine(
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
     'Input "runtime-version" must be one non-empty path segment'

@@ -51,7 +51,7 @@ The static endpoint is fixed to one project, platform, channel, and runtime tupl
 
 Publisher CI owns the release proof: it validates the export, hashes every asset, signs the exact JSON bytes embedded in the multipart body, and verifies the R2 write before considering a release ready. It uploads assets first and overwrites the fixed manifest object only after those checks pass.
 
-The channel is part of the asset URL in this contract. Publishing a manifest to `dev`, `prod`, `staging`, or `production` therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
+The channel is part of the asset URL in this contract. It must be a non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. Publishing to a channel therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
 
 Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. It does not delete old assets. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
 
@@ -86,7 +86,7 @@ The artifact named by `artifact_name` must contain the export directory contents
 
 The reusable workflow is the supported publishing entrypoint. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same `(project, platform, channel, runtimeVersion)` tuple before calling the workflow. The workflow owner guard accepts only repositories with `repository_owner_id=29172280`; Vault remains the source of R2 and signing credentials.
 
-`platform` accepts `ios` or `android`; `channel` accepts `dev`, `prod`, `staging`, or `production`; `project` is a required signing-path segment such as `kosmo-native` and may contain only letters, numbers, dots, underscores, and hyphens. `keyid` is optional and defaults to `main`; it uses the same safe segment characters. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
+`platform` accepts `ios` or `android`; `channel` is a required non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. `project` is a required signing-path segment such as `kosmo-native` and may contain only letters, numbers, dots, underscores, and hyphens. `keyid` is optional and defaults to `main`; it uses the same safe segment characters. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
 
 ### Inputs and outputs
 

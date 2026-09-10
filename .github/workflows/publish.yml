@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       channel:
-        description: OTA channel to publish (dev, prod, staging, or production)
+        description: OTA channel to publish (safe path segment; letters, numbers, dots, underscores, or hyphens)
         required: true
         type: string
       runtime_version:
