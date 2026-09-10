@@ -34,7 +34,7 @@ expo-signature: sig="<base64>", keyid="main", alg="rsa-v1_5-sha256"
 
 The `expo-signature` value signs exactly the JSON bytes in that part. The signature is not duplicated in custom object metadata. Asset objects use their content-addressed keys and are served with `public, max-age=31536000, immutable`; the manifest uses `private, no-store`.
 
-Publisher storage is uncompressed: manifest and asset objects must be written without `content-encoding` (an explicit `identity` value is accepted). The publisher verifies the stored body, content type, cache policy, and bytes after each write.
+Publisher storage is uncompressed: manifest and asset objects must be written without `content-encoding` (an explicit `identity` value is accepted). Every `PutObject` includes the object's SHA-256 digest in the standard base64 `ChecksumSHA256` field so R2 validates the bytes during the write; the publisher does not read objects back after uploading.
 
 Before a device can consume a static manifest URL, the public host/CDN must route the exact encoded host/path to the matching R2 object and return these top-level response headers:
 
@@ -96,7 +96,7 @@ The workflow inputs are `artifact_name`, `project`, `platform`, `channel`, `runt
 
 Each caller must bundle the public certificate matching the `keyid` used for its signing key. Certificate lifecycle and rotation remain caller-owned.
 
-The publisher internally writes `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest) for its run step; the reusable workflow does not expose caller-visible workflow outputs. A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded, the fixed multipart manifest object was written, and the published object was read back successfully. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
+The publisher internally writes `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest) for its run step; the reusable workflow does not expose caller-visible workflow outputs. A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded with SHA-256 checksums, and the fixed multipart manifest object was written. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
 
 The generated manifest deliberately uses `metadata: {}` and `extra: {}`. It does not populate `extra.expoClient`, so on a remote update `Constants.expoConfig` is `null` in SDK 56. Callers that depend on Expo config through `Constants.expoConfig` are outside this publisher's current compatibility contract; they must keep that configuration in the bundle or wait for an explicitly approved public-config artifact extension.
 
@@ -114,7 +114,7 @@ The artifact named by `artifact_name` must contain the root of an approved Expo 
     └── <asset files referenced by metadata.json>
 ```
 
-The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. The Expo export's inventory names are not the publication identity: the publisher hashes the actual bundle and asset bytes with SHA-256, uses lowercase hexadecimal content-addressed R2 asset keys, and emits the protocol's base64url hashes in the signed manifest. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
+The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. Each Expo asset filename is an opaque Expo-provided `key` identifier and is preserved as the manifest asset `key`; it is separate from the lowercase hexadecimal SHA-256 content-addressed R2 key. The publisher computes SHA-256 for R2 checksums and signed manifest `hash` values, which use standard base64 and base64url encodings respectively. The launch asset uses its SHA-256 hexadecimal bundle key. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
 
 Build and approval remain caller-owned. For example, the calling workflow can run `expo export --platform ios --output-dir .artifacts/expo-export` and upload that directory as an artifact in an earlier job, then the reusable workflow downloads it in the protected publish job before running the trusted bundle. The export must come from the same approved source and release metadata that the workflow records; the publisher does not rebuild or silently replace it.
 
