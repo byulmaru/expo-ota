@@ -9,9 +9,10 @@ const actionInputsSchema = z.object({
   platform: z.enum(["ios", "android"], {
     error: 'Input "platform" must be ios or android',
   }),
-  channel: z.enum(["staging", "production"], {
-    error: 'Input "channel" must be staging or production',
-  }),
+  channel: z.string().min(1).refine(
+    (value) => value !== "." && value !== ".." && /^[A-Za-z0-9._-]+$/u.test(value),
+    'Input "channel" must be one safe path segment',
+  ),
   runtimeVersion: z.string().min(1).refine(
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
     'Input "runtime-version" must be one non-empty path segment',

@@ -13,7 +13,7 @@ const temporaryDirectories: string[] = [];
 function inputs(
   exportDir: string,
   privateKey: string,
-  overrides: Partial<Pick<ActionInputs, "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
+  overrides: Partial<Pick<ActionInputs, "channel" | "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
 ): ActionInputs {
   return parseActionInputs({
     exportDir,
@@ -102,6 +102,26 @@ describe("Expo OTA publish action", () => {
     expect(custom.r2Bucket).toBe("custom-releases");
     expect(custom.r2AccountId).toBe("custom-account");
   });
+
+  it.each(["dev", "prod", "preview-123"] as const)("accepts %s and isolates tuple paths", async (channel) => {
+    const fixtureData = await fixture();
+    const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey, { channel }));
+    const publicObjectPath = `releases/kosmo-native/ios/${channel}/fingerprint%20test`;
+    const storageKeyPrefix = `releases/kosmo-native/ios/${channel}/fingerprint test`;
+
+    expect(release.manifestUrl).toBe(`https://expo-ota.byulmaru.co/${publicObjectPath}/manifest.json`);
+    expect(release.manifestKey).toBe(`${storageKeyPrefix}/manifest.json`);
+    expect(release.assets.every((asset) => asset.key.startsWith(`${storageKeyPrefix}/assets/`))).toBe(true);
+  });
+
+  it.each([".", "..", "preview/123", "preview 123", "preview?123"] as const)(
+    "rejects channel %j that is not a safe path segment",
+    (channel) => {
+      expect(() => inputs("export", "private-key", { channel })).toThrow(
+        'Input "channel" must be one safe path segment',
+      );
+    },
+  );
 
   it("rejects unsafe service overrides before preparing a release", () => {
     expect(() => parseActionInputs({

@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       channel:
-        description: OTA channel to publish
+        description: OTA channel to publish (safe path segment; letters, numbers, dots, underscores, or hyphens)
         required: true
         type: string
       runtime_version:
@@ -30,9 +30,8 @@ on:
         type: string
     secrets:
       signing_private_key:
-        description: App-owned PEM encoded RSA private key used for Expo Updates signing
+        description: PEM encoded RSA private key used for Expo Updates code signing
         required: true
-
 jobs:
   publish:
     name: Publish Expo OTA release
@@ -73,6 +72,20 @@ jobs:
           audience: ${{ vars.TAILSCALE_AUDIENCE }}
           oauth-client-id: ${{ vars.TAILSCALE_OAUTH_CLIENT_ID }}
           tags: tag:github-actions
+
+      - name: Validate signing key coordinates
+        env:
+          KEYID: ${{ inputs.keyid }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          if [[ "$PROJECT" == "." || "$PROJECT" == ".." || ! "$PROJECT" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::project must contain only letters, numbers, dots, underscores, and hyphens"
+            exit 1
+          fi
+          if [[ "$KEYID" == "." || "$KEYID" == ".." || ! "$KEYID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::keyid must contain only letters, numbers, dots, underscores, and hyphens"
+            exit 1
+          fi
 
       - name: Read R2 credentials from Vault
         id: vault

@@ -51,17 +51,17 @@ The static endpoint is fixed to one project, platform, channel, and runtime tupl
 
 Publisher CI owns the release proof: it validates the export, hashes every asset, signs the exact JSON bytes embedded in the multipart body, and verifies the R2 write before considering a release ready. It uploads assets first and overwrites the fixed manifest object only after those checks pass.
 
-The channel is part of the asset URL in this contract. Promoting a manifest between `staging` and `production` therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
+The channel is part of the asset URL in this contract. It must be a non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. Publishing to a channel therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
 
 Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. It does not delete old assets. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
 
 ## Reusable Vault publisher workflow
 
-Application repositories should call the reusable workflow after exporting and uploading the approved export artifact. The caller passes only the artifact name, release tuple, and its app-owned signing key. The workflow downloads the caller artifact, joins the existing private Tailnet, authenticates to Vault with GitHub OIDC, reads the R2 access key object from `secret/data/expo-ota/r2`, maps the canonical service variables into the publisher's required inputs, and runs the checked-out Node 24 bundle. It does not inherit all caller secrets; `signing_private_key` remains an explicit app-owned workflow secret.
+Application repositories should call the reusable workflow after exporting and uploading the approved export artifact. The caller passes the artifact name, release tuple, and its `signing_private_key` workflow secret. The workflow downloads the caller artifact, joins the existing private Tailnet, authenticates to Vault with GitHub OIDC, reads only the R2 credential object from `secret/data/expo-ota/r2`, maps the canonical service variables into the publisher's required inputs, and runs the checked-out Node 24 bundle with the caller-provided signing key.
 
 The caller must have the non-secret Tailscale variables `TAILSCALE_AUDIENCE` and `TAILSCALE_OAUTH_CLIENT_ID`, plus `EXPO_OTA_PUBLIC_BASE_URL`, `EXPO_OTA_R2_BUCKET`, and `CLOUDFLARE_ACCOUNT_ID`, available from its repository or organization configuration. The reusable workflow uses the existing `VAULT_ADDR` variable for both the Vault endpoint and GitHub OIDC audience; callers do not configure a separate audience variable. The workflow does not rely on variables from this repository's private configuration.
 
-Vault provisioning is pending with the infrastructure owner. The `expo-ota-publish` role at the `github-actions` JWT mount must be bound to `repository_owner_id=29172280` and the exact `job_workflow_ref` `byulmaru/expo-ota/.github/workflows/publish.yml@refs/heads/main`, allowing approved callers across the `byulmaru` organization while keeping the publisher workflow pinned to this repository and ref. Its policy must grant read access only to the dedicated KV v2 API path `secret/data/expo-ota/r2`; the workflow selects only the `access_key_id` and `secret_access_key` fields from that object. Public repository visibility and workflow callability do not bypass this Vault trust.
+The existing R2 `expo-ota-publish` role and policy are present in Kubernetes `main` after PR #98. The role at the `github-actions` JWT mount is bound to `repository_owner_id=29172280` and the exact `job_workflow_ref` `byulmaru/expo-ota/.github/workflows/publish.yml@refs/heads/main`, allowing approved callers across the `byulmaru` organization while keeping the publisher workflow pinned to this repository and ref. Its policy retains read access to the dedicated KV v2 API path `secret/data/expo-ota/r2`; signing-key access belongs to each caller's own protected workflow and is passed to this reusable workflow through the required `signing_private_key` secret. Public repository visibility and workflow callability do not bypass either credential boundary.
 
 ```yaml
 jobs:
@@ -76,23 +76,25 @@ jobs:
       artifact_name: expo-ota-export
       project: kosmo-native
       platform: ios
-      channel: production
+      channel: prod
       runtime_version: '1.0.0'
     secrets:
       signing_private_key: ${{ secrets.EXPO_OTA_SIGNING_PRIVATE_KEY }}
 ```
 
-The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source and for passing the app-specific signing key; it does not need to configure the shared R2 secrets, which the reusable workflow reads from Vault on its runner at publish time.
+The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source. The reusable workflow reads the shared R2 credentials from Vault on its runner at publish time and receives the caller's signing key through `secrets.signing_private_key`.
 
 ## Publisher workflow inputs and outputs
 
-The reusable workflow is the supported publishing entrypoint. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same `(project, platform, channel, runtimeVersion)` tuple before calling the workflow. The workflow owner guard accepts only repositories with `repository_owner_id=29172280`; Vault remains the source of R2 credentials.
+The reusable workflow is the supported publishing entrypoint. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same `(project, platform, channel, runtimeVersion)` tuple before calling the workflow. The workflow owner guard accepts only repositories with `repository_owner_id=29172280`; Vault remains the source of R2 credentials, while the caller owns retrieval and handoff of its signing secret.
 
-`platform` accepts `ios` or `android`; `channel` accepts `staging` or `production`; `project` is a required non-empty path segment such as `kosmo-native`. `keyid` is optional and defaults to `main`. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
+`platform` accepts `ios` or `android`; `channel` is a required non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. `project` is a required URL and R2 namespace such as `kosmo-native` and may contain only letters, numbers, dots, underscores, and hyphens. `keyid` is optional and defaults to `main`; it uses the same safe segment characters. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
 
 ### Inputs and outputs
 
-The workflow inputs are `artifact_name`, `project`, `platform`, `channel`, `runtime_version`, and `keyid`; `runtime_version` is required and `keyid` is optional. The app-owned `signing_private_key` secret is also required. The workflow maps `EXPO_OTA_PUBLIC_BASE_URL`, `EXPO_OTA_R2_BUCKET`, and `CLOUDFLARE_ACCOUNT_ID` into the publisher's required service inputs, while Vault supplies the R2 access key ID and secret access key. The publisher validates every mapped value; the removed root Action metadata is not a separate supported entrypoint. The R2 access key ID, secret access key, and signing key are publishing credentials; callers must never commit them. `keyid` is fixed when the manifest is published.
+The workflow inputs are `artifact_name`, `project`, `platform`, `channel`, `runtime_version`, and `keyid`; `runtime_version` is required and `keyid` is optional. The required `signing_private_key` workflow secret is passed by the caller and maps to the publisher's signing input. The workflow maps `EXPO_OTA_PUBLIC_BASE_URL`, `EXPO_OTA_R2_BUCKET`, and `CLOUDFLARE_ACCOUNT_ID` into the publisher's required service inputs, while Vault supplies only the R2 access key ID and secret access key. The reusable workflow checks out and executes the tracked Node 24 publisher bundle directly. The R2 access key ID, secret access key, and signing key are publishing credentials; callers must never commit them. `keyid` is fixed when the manifest is published and is not combined with `runtime_version` for secret storage.
+
+Each caller must bundle the public certificate matching the `keyid` used for its signing key. Certificate lifecycle and rotation remain caller-owned.
 
 The publisher internally writes `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest) for its run step; the reusable workflow does not expose caller-visible workflow outputs. A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded, the fixed multipart manifest object was written, and the published object was read back successfully. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
 
