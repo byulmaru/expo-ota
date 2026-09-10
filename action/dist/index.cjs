@@ -24971,7 +24971,7 @@ var require_dist_cjs11 = __commonJS({
     var { setCredentialFeature: setCredentialFeature2 } = (init_client3(), __toCommonJS(client_exports2));
     var { CredentialsProviderError: CredentialsProviderError2, parseKnownFiles: parseKnownFiles2, getProfileName: getProfileName2 } = (init_config2(), __toCommonJS(config_exports));
     var { HttpRequest: HttpRequest2 } = (init_protocols(), __toCommonJS(protocols_exports));
-    var { createHash: createHash8, createPrivateKey: createPrivateKey2, createPublicKey, sign: sign4 } = require("node:crypto");
+    var { createHash: createHash7, createPrivateKey: createPrivateKey2, createPublicKey, sign: sign4 } = require("node:crypto");
     var { promises } = require("node:fs");
     var { homedir: homedir2 } = require("node:os");
     var { dirname, join: join5 } = require("node:path");
@@ -25140,7 +25140,7 @@ var require_dist_cjs11 = __commonJS({
       getTokenFilePath() {
         const directory = process.env.AWS_LOGIN_CACHE_DIRECTORY ?? join5(homedir2(), ".aws", "login", "cache");
         const loginSessionBytes = Buffer.from(this.loginSession, "utf8");
-        const loginSessionSha256 = createHash8("sha256").update(loginSessionBytes).digest("hex");
+        const loginSessionSha256 = createHash7("sha256").update(loginSessionBytes).digest("hex");
         return join5(directory, `${loginSessionSha256}.json`);
       }
       derToRawSignature(derSignature) {
@@ -34298,7 +34298,7 @@ var require_dist_cjs16 = __commonJS({
     };
     var GetObjectAttributesCommand = class extends command5(_ep5, _mw1, "GetObjectAttributes", GetObjectAttributes$) {
     };
-    var GetObjectCommand2 = class extends command5(_ep05, _mw7, "GetObject", GetObject$) {
+    var GetObjectCommand = class extends command5(_ep05, _mw7, "GetObject", GetObject$) {
     };
     var GetObjectLegalHoldCommand = class extends command5(_ep5, _mw05, "GetObjectLegalHold", GetObjectLegalHold$) {
     };
@@ -34561,7 +34561,7 @@ var require_dist_cjs16 = __commonJS({
       GetBucketTaggingCommand,
       GetBucketVersioningCommand,
       GetBucketWebsiteCommand,
-      GetObjectCommand: GetObjectCommand2,
+      GetObjectCommand,
       GetObjectAclCommand,
       GetObjectAnnotationCommand,
       GetObjectAttributesCommand,
@@ -35355,7 +35355,7 @@ var require_dist_cjs16 = __commonJS({
     exports2.GetObjectAttributesOutput$ = GetObjectAttributesOutput$;
     exports2.GetObjectAttributesParts$ = GetObjectAttributesParts$;
     exports2.GetObjectAttributesRequest$ = GetObjectAttributesRequest$;
-    exports2.GetObjectCommand = GetObjectCommand2;
+    exports2.GetObjectCommand = GetObjectCommand;
     exports2.GetObjectLegalHold$ = GetObjectLegalHold$;
     exports2.GetObjectLegalHoldCommand = GetObjectLegalHoldCommand;
     exports2.GetObjectLegalHoldOutput$ = GetObjectLegalHoldOutput$;
@@ -50357,7 +50357,6 @@ function readActionInputs() {
 
 // action/src/publish.ts
 var import_client_s3 = __toESM(require_dist_cjs16(), 1);
-var import_node_crypto8 = require("node:crypto");
 
 // action/src/prepare.ts
 var import_node_crypto7 = require("node:crypto");
@@ -50428,18 +50427,17 @@ async function resolveExportFile(exportRoot, metadataPath) {
 }
 function hashObject(body) {
   const sha256 = (0, import_node_crypto7.createHash)("sha256").update(body).digest();
-  const md5 = (0, import_node_crypto7.createHash)("md5").update(body).digest();
   return {
     sha256Hex: sha256.toString("hex"),
-    sha256Base64Url: sha256.toString("base64url"),
-    md5Base64: md5.toString("base64"),
-    md5Hex: md5.toString("hex")
+    sha256Base64: sha256.toString("base64"),
+    sha256Base64Url: sha256.toString("base64url")
   };
 }
 async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrlPrefix, prefix, contentType) {
   const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await (0, import_promises3.readFile)(filePath);
   const hashes = hashObject(body);
+  const expoAssetKey = (0, import_node_path6.basename)(metadataPath.replaceAll("\\", "/"));
   let fileExtension;
   if (metadataExtension) {
     const normalizedExtension = metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension;
@@ -50450,6 +50448,7 @@ async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrl
   }
   return {
     key: `${prefix}/assets/${hashes.sha256Hex}`,
+    expoAssetKey,
     body,
     contentType,
     ...hashes,
@@ -50522,13 +50521,13 @@ async function prepareRelease(input2) {
     runtimeVersion: validatedInput.runtimeVersion,
     launchAsset: {
       hash: launch.sha256Base64Url,
-      key: launch.md5Hex,
+      key: launch.sha256Hex,
       contentType: launch.contentType,
       url: launch.url
     },
     assets: assets.slice(1).map((asset) => ({
       hash: asset.sha256Base64Url,
-      key: asset.md5Hex,
+      key: asset.expoAssetKey,
       contentType: asset.contentType,
       ...asset.fileExtension ? { fileExtension: asset.fileExtension } : {},
       url: asset.url
@@ -50577,29 +50576,6 @@ expo-signature: ${signature}\r
 // action/src/publish.ts
 var ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 var MANIFEST_CACHE_CONTROL = "private, no-store";
-async function verifyObject(client, bucket, object2, cacheControl) {
-  const response = await client.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: object2.key }));
-  if (response.ContentLength !== object2.body.byteLength || response.ContentType !== object2.contentType) {
-    throw new Error(`R2 object verification failed for ${object2.key}`);
-  }
-  if (response.ContentEncoding && response.ContentEncoding.toLowerCase() !== "identity") {
-    throw new Error(`R2 object verification found compressed content for ${object2.key}`);
-  }
-  if (response.CacheControl !== cacheControl) {
-    throw new Error(`R2 object verification found unexpected cache control for ${object2.key}`);
-  }
-  if (!response.Body || typeof response.Body !== "object") throw new Error("R2 read-back response had no body");
-  const hash2 = (0, import_node_crypto8.createHash)("sha256");
-  let size = 0;
-  for await (const chunk of response.Body) {
-    const bytes = Buffer.from(chunk);
-    hash2.update(bytes);
-    size += bytes.byteLength;
-  }
-  if (size !== object2.body.byteLength || hash2.digest("hex") !== object2.sha256Hex) {
-    throw new Error(`R2 object body verification failed for ${object2.key}`);
-  }
-}
 async function publishRelease(input2, client) {
   const validatedInput = parseActionInputs(input2);
   const transport = client ?? new import_client_s3.S3Client({
@@ -50618,7 +50594,7 @@ async function publishRelease(input2, client) {
       Key: asset.key,
       Body: asset.body,
       ContentType: asset.contentType,
-      ContentMD5: asset.md5Base64,
+      ChecksumSHA256: asset.sha256Base64,
       CacheControl: ASSET_CACHE_CONTROL,
       IfNoneMatch: "*"
     });
@@ -50626,28 +50602,20 @@ async function publishRelease(input2, client) {
       await transport.send(command5);
     } catch (error52) {
       const isPreconditionFailure = typeof error52 === "object" && error52 !== null && (error52.name === "PreconditionFailed" || error52.$metadata?.httpStatusCode === 412);
-      if (!isPreconditionFailure) throw new Error(`R2 asset upload failed for ${asset.key}`);
+      if (!isPreconditionFailure) throw error52;
     }
-    await verifyObject(transport, validatedInput.r2Bucket, asset, ASSET_CACHE_CONTROL);
   }
   const manifestHashes = hashObject(release2.manifestUploadBody);
-  const manifest = {
-    key: release2.manifestKey,
-    body: release2.manifestUploadBody,
-    contentType: release2.manifestContentType,
-    ...manifestHashes
-  };
   await transport.send(
     new import_client_s3.PutObjectCommand({
       Bucket: validatedInput.r2Bucket,
       Key: release2.manifestKey,
       Body: release2.manifestUploadBody,
       ContentType: release2.manifestContentType,
-      ContentMD5: manifest.md5Base64,
+      ChecksumSHA256: manifestHashes.sha256Base64,
       CacheControl: MANIFEST_CACHE_CONTROL
     })
   );
-  await verifyObject(transport, validatedInput.r2Bucket, manifest, MANIFEST_CACHE_CONTROL);
   return { updateId: release2.updateId, manifestUrl: release2.manifestUrl };
 }
 

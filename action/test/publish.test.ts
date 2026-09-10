@@ -1,14 +1,15 @@
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
+import { S3ServiceException } from "@aws-sdk/client-s3";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseActionInputs, type ActionInputs } from "../src/input";
 import { prepareRelease } from "../src/prepare";
 import { publishRelease, type S3Transport } from "../src/publish";
 
 const temporaryDirectories: string[] = [];
+const EXPO_ASSET_KEY = "0123456789abcdef0123456789abcdef";
 
 function inputs(
   exportDir: string,
@@ -39,14 +40,15 @@ async function fixture(): Promise<{ directory: string; privateKey: string; publi
   const privatePem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
   const publicPem = publicKey.export({ format: "pem", type: "spki" }).toString();
   await writeFile(join(directory, "bundle.hbc"), "bundle bytes");
-  await writeFile(join(directory, "logo.png"), "asset bytes");
+  await mkdir(join(directory, "assets"));
+  await writeFile(join(directory, "assets", EXPO_ASSET_KEY), "asset bytes");
   await writeFile(
     join(directory, "metadata.json"),
     JSON.stringify({
       version: 0,
       bundler: "metro",
       fileMetadata: {
-        ios: { bundle: "bundle.hbc", assets: [{ path: "logo.png", ext: "png" }] },
+        ios: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "png" }] },
       },
     }),
   );
@@ -184,9 +186,11 @@ describe("Expo OTA publish action", () => {
     expect((manifest.launchAsset as { hash: string }).hash).toBe(
       createHash("sha256").update("bundle bytes").digest("base64url"),
     );
+    expect((manifest.launchAsset as { key: string }).key).toBe(launchHash);
     expect((manifest.assets as Array<{ hash: string }>)[0]?.hash).toBe(
       createHash("sha256").update("asset bytes").digest("base64url"),
     );
+    expect((manifest.assets as Array<{ key: string }>)[0]?.key).toBe(EXPO_ASSET_KEY);
   });
 
   it.each([
@@ -277,7 +281,9 @@ describe("Expo OTA publish action", () => {
       JSON.stringify({
         version: 0,
         bundler: "metro",
-        fileMetadata: { ios: { bundle: "bundle.hbc", assets: [{ path: "logo.png", ext: "constructor" }] } },
+        fileMetadata: {
+          ios: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "constructor" }] },
+        },
       }),
     );
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
@@ -288,7 +294,24 @@ describe("Expo OTA publish action", () => {
     expect(manifest.assets[0]?.contentType).toBe("application/octet-stream");
   });
 
-  it("uploads immutable assets before replacing and verifying the fixed manifest", async () => {
+  it("rethrows non-precondition S3 asset upload errors unchanged", async () => {
+    const fixtureData = await fixture();
+    const serviceError = new S3ServiceException({
+      name: "InvalidRequest",
+      $fault: "client",
+      $metadata: { httpStatusCode: 400 },
+      message: "You can only specify one non-default checksum at a time.",
+    });
+    const client: S3Transport = {
+      async send() {
+        throw serviceError;
+      },
+    };
+
+    await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), client)).rejects.toBe(serviceError);
+  });
+
+  it("uploads immutable assets before replacing the fixed manifest with SHA-256 checksums", async () => {
     const fixtureData = await fixture();
     const storage = new Map<string, {
       body: Buffer;
@@ -298,36 +321,25 @@ describe("Expo OTA publish action", () => {
     const events: string[] = [];
     const manifestObjectKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
     const assetObjectPrefix = "releases/kosmo-native/ios/staging/fingerprint test/assets/";
-    let corruptAssetReads = false;
     const fakeClient: S3Transport = {
       async send(command) {
         const input = command.input;
         const bucket = String(input.Bucket);
         const key = String(input.Key);
         const storageKey = `${bucket}:${key}`;
-        if (input.Body !== undefined) {
-          if (input.IfNoneMatch === "*" && storage.has(storageKey)) {
-            throw { name: "PreconditionFailed", $metadata: { httpStatusCode: 412 } };
-          }
-          const body = Buffer.isBuffer(input.Body) ? input.Body : Buffer.from(String(input.Body));
-          storage.set(storageKey, {
-            body,
-            contentType: String(input.ContentType),
-            cacheControl: input.CacheControl as string | undefined,
-          });
-          events.push(`put:${bucket}:${key}`);
-          return {};
+        if (input.Body === undefined) throw new Error("unexpected non-PutObject command");
+        if (input.IfNoneMatch === "*" && storage.has(storageKey)) {
+          throw { name: "PreconditionFailed", $metadata: { httpStatusCode: 412 } };
         }
-        const object = storage.get(storageKey);
-        if (!object) throw new Error(`missing ${bucket}:${key}`);
-        const body = corruptAssetReads && key.includes("/assets/") ? Buffer.alloc(object.body.length, 0x78) : object.body;
-        events.push(`get:${bucket}:${key}`);
-        return {
-          ContentLength: body.length,
-          ContentType: object.contentType,
-          CacheControl: object.cacheControl,
-          Body: Readable.from([body]),
-        };
+        const body = Buffer.isBuffer(input.Body) ? input.Body : Buffer.from(String(input.Body));
+        expect(input.ChecksumSHA256).toBe(createHash("sha256").update(body).digest("base64"));
+        storage.set(storageKey, {
+          body,
+          contentType: String(input.ContentType),
+          cacheControl: input.CacheControl as string | undefined,
+        });
+        events.push(`put:${bucket}:${key}`);
+        return {};
       },
     };
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey, {
@@ -355,12 +367,12 @@ describe("Expo OTA publish action", () => {
     expect(assetObjects.every(([, object]) => object.cacheControl === "public, max-age=31536000, immutable")).toBe(true);
     expect(new Set([...storage.keys()].map((key) => key.split(":", 1)[0]))).toEqual(new Set(["custom-releases"]));
     const firstManifestPut = events.findIndex((event) => event === `put:custom-releases:${manifestObjectKey}`);
-    const lastAssetRead = Math.max(
+    const lastAssetPut = Math.max(
       ...events
-        .map((event, index) => (event.startsWith(`get:custom-releases:${assetObjectPrefix}`) ? index : -1))
+        .map((event, index) => (event.startsWith(`put:custom-releases:${assetObjectPrefix}`) ? index : -1))
         .filter((index) => index >= 0),
     );
-    expect(firstManifestPut).toBeGreaterThan(lastAssetRead);
+    expect(firstManifestPut).toBeGreaterThan(lastAssetPut);
 
     events.length = 0;
     const second = await publishRelease(actionInputs, fakeClient);
@@ -371,10 +383,7 @@ describe("Expo OTA publish action", () => {
     expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
     );
-
-    events.length = 0;
-    corruptAssetReads = true;
-    await expect(publishRelease(actionInputs, fakeClient)).rejects.toThrow("R2 object body verification failed");
-    expect(events.some((event) => event === `put:custom-releases:${manifestObjectKey}`)).toBe(false);
+    expect(events.every((event) => event.startsWith("put:custom-releases:"))).toBe(true);
+    expect(events).toHaveLength(1);
   });
 });

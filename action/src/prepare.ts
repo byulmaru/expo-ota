@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 import { parseActionInputs, type ActionInputs } from "./input";
 
@@ -8,12 +8,12 @@ const SIGNING_ALGORITHM = "rsa-v1_5-sha256" as const;
 
 export interface PreparedObject {
   key: string;
+  expoAssetKey: string;
   body: Buffer;
   contentType: string;
   sha256Hex: string;
+  sha256Base64: string;
   sha256Base64Url: string;
-  md5Base64: string;
-  md5Hex: string;
 }
 
 export interface PreparedRelease {
@@ -96,14 +96,12 @@ async function resolveExportFile(exportRoot: string, metadataPath: string): Prom
 
 export function hashObject(
   body: Buffer,
-): Pick<PreparedObject, "sha256Hex" | "sha256Base64Url" | "md5Base64" | "md5Hex"> {
+): Pick<PreparedObject, "sha256Hex" | "sha256Base64" | "sha256Base64Url"> {
   const sha256 = createHash("sha256").update(body).digest();
-  const md5 = createHash("md5").update(body).digest();
   return {
     sha256Hex: sha256.toString("hex"),
+    sha256Base64: sha256.toString("base64"),
     sha256Base64Url: sha256.toString("base64url"),
-    md5Base64: md5.toString("base64"),
-    md5Hex: md5.toString("hex"),
   };
 }
 
@@ -118,6 +116,7 @@ async function prepareFile(
   const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await readFile(filePath);
   const hashes = hashObject(body);
+  const expoAssetKey = basename(metadataPath.replaceAll("\\", "/"));
   let fileExtension: string | undefined;
   if (metadataExtension) {
     const normalizedExtension = metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension;
@@ -128,6 +127,7 @@ async function prepareFile(
   }
   return {
     key: `${prefix}/assets/${hashes.sha256Hex}`,
+    expoAssetKey,
     body,
     contentType,
     ...hashes,
@@ -207,13 +207,13 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     runtimeVersion: validatedInput.runtimeVersion,
     launchAsset: {
       hash: launch.sha256Base64Url,
-      key: launch.md5Hex,
+      key: launch.sha256Hex,
       contentType: launch.contentType,
       url: launch.url,
     },
     assets: assets.slice(1).map((asset) => ({
       hash: asset.sha256Base64Url,
-      key: asset.md5Hex,
+      key: asset.expoAssetKey,
       contentType: asset.contentType,
       ...(asset.fileExtension ? { fileExtension: asset.fileExtension } : {}),
       url: asset.url,
