@@ -9,8 +9,8 @@ const actionInputsSchema = z.object({
   platform: z.enum(["ios", "android"], {
     error: 'Input "platform" must be ios or android',
   }),
-  channel: z.enum(["staging", "production"], {
-    error: 'Input "channel" must be staging or production',
+  channel: z.enum(["dev", "prod", "staging", "production"], {
+    error: 'Input "channel" must be dev, prod, staging, or production',
   }),
   runtimeVersion: z.string().min(1).refine(
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
