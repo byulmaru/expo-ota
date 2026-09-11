@@ -110,7 +110,7 @@ async function prepareFile(
   metadataPath: string,
   metadataExtension: string,
   assetUrlPrefix: string,
-  prefix: string,
+  assetPrefix: string,
   contentType: string,
 ): Promise<PreparedObject & { fileExtension?: string; url: string }> {
   const filePath = await resolveExportFile(exportRoot, metadataPath);
@@ -126,7 +126,7 @@ async function prepareFile(
     fileExtension = `.${normalizedExtension}`;
   }
   return {
-    key: `${prefix}/assets/${hashes.sha256Hex}`,
+    key: `${assetPrefix}/${hashes.sha256Hex}`,
     expoAssetKey,
     body,
     contentType,
@@ -147,6 +147,9 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
   ].join("/");
   const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
+  const assetPrefix = `${prefix}/assets`;
+  const updateId = randomUUID();
+  const releaseAssetPrefix = `${assetPrefix}/${updateId}`;
   const exportRoot = resolve(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
   let parsedMetadata: unknown;
@@ -176,8 +179,8 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     exportRoot,
     platformMetadata.data.bundle,
     "",
-    `${publicObjectUrl}/assets`,
-    prefix,
+    `${publicObjectUrl}/assets/${updateId}`,
+    releaseAssetPrefix,
     "application/javascript",
   );
   const assets = [
@@ -186,7 +189,14 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension]! : "application/octet-stream";
-        return prepareFile(exportRoot, asset.path, asset.ext, `${publicObjectUrl}/assets`, prefix, contentType);
+        return prepareFile(
+          exportRoot,
+          asset.path,
+          asset.ext,
+          `${publicObjectUrl}/assets/${updateId}`,
+          releaseAssetPrefix,
+          contentType,
+        );
       }),
     )),
   ];
@@ -199,7 +209,6 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     uniqueAssets.set(asset.key, asset);
   }
 
-  const updateId = randomUUID();
   const createdAt = new Date().toISOString();
   const manifest = {
     id: updateId,

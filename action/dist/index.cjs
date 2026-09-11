@@ -34240,7 +34240,7 @@ var require_dist_cjs16 = __commonJS({
     };
     var DeleteObjectCommand = class extends command5(_ep05, _mw05, "DeleteObject", DeleteObject$) {
     };
-    var DeleteObjectsCommand = class extends command5(_ep5, _mw5, "DeleteObjects", DeleteObjects$) {
+    var DeleteObjectsCommand2 = class extends command5(_ep5, _mw5, "DeleteObjects", DeleteObjects$) {
     };
     var DeleteObjectTaggingCommand = class extends command5(_ep5, _mw05, "DeleteObjectTagging", DeleteObjectTagging$) {
     };
@@ -34334,7 +34334,7 @@ var require_dist_cjs16 = __commonJS({
     };
     var ListObjectsCommand = class extends command5(_ep8, _mw05, "ListObjects", ListObjects$) {
     };
-    var ListObjectsV2Command = class extends command5(_ep8, _mw05, "ListObjectsV2", ListObjectsV2$) {
+    var ListObjectsV2Command2 = class extends command5(_ep8, _mw05, "ListObjectsV2", ListObjectsV2$) {
     };
     var ListObjectVersionsCommand = class extends command5(_ep8, _mw05, "ListObjectVersions", ListObjectVersions$) {
     };
@@ -34417,7 +34417,7 @@ var require_dist_cjs16 = __commonJS({
     var paginateListBuckets = createPaginator2(S3Client2, ListBucketsCommand, "ContinuationToken", "ContinuationToken", "MaxBuckets");
     var paginateListDirectoryBuckets = createPaginator2(S3Client2, ListDirectoryBucketsCommand, "ContinuationToken", "ContinuationToken", "MaxDirectoryBuckets");
     var paginateListObjectAnnotations = createPaginator2(S3Client2, ListObjectAnnotationsCommand, "ContinuationToken", "NextContinuationToken", "MaxAnnotationResults");
-    var paginateListObjectsV2 = createPaginator2(S3Client2, ListObjectsV2Command, "ContinuationToken", "NextContinuationToken", "MaxKeys");
+    var paginateListObjectsV2 = createPaginator2(S3Client2, ListObjectsV2Command2, "ContinuationToken", "NextContinuationToken", "MaxKeys");
     var paginateListParts = createPaginator2(S3Client2, ListPartsCommand, "PartNumberMarker", "NextPartNumberMarker", "MaxParts");
     var checkState$3 = async (client, input2) => {
       let reason;
@@ -34535,7 +34535,7 @@ var require_dist_cjs16 = __commonJS({
       DeleteBucketWebsiteCommand,
       DeleteObjectCommand,
       DeleteObjectAnnotationCommand,
-      DeleteObjectsCommand,
+      DeleteObjectsCommand: DeleteObjectsCommand2,
       DeleteObjectTaggingCommand,
       DeletePublicAccessBlockCommand,
       GetBucketAbacCommand,
@@ -34582,7 +34582,7 @@ var require_dist_cjs16 = __commonJS({
       ListMultipartUploadsCommand,
       ListObjectAnnotationsCommand,
       ListObjectsCommand,
-      ListObjectsV2Command,
+      ListObjectsV2Command: ListObjectsV2Command2,
       ListObjectVersionsCommand,
       ListPartsCommand,
       PutBucketAbacCommand,
@@ -35220,7 +35220,7 @@ var require_dist_cjs16 = __commonJS({
     exports2.DeleteObjectTaggingOutput$ = DeleteObjectTaggingOutput$;
     exports2.DeleteObjectTaggingRequest$ = DeleteObjectTaggingRequest$;
     exports2.DeleteObjects$ = DeleteObjects$;
-    exports2.DeleteObjectsCommand = DeleteObjectsCommand;
+    exports2.DeleteObjectsCommand = DeleteObjectsCommand2;
     exports2.DeleteObjectsOutput$ = DeleteObjectsOutput$;
     exports2.DeleteObjectsRequest$ = DeleteObjectsRequest$;
     exports2.DeletePublicAccessBlock$ = DeletePublicAccessBlock$;
@@ -35479,7 +35479,7 @@ var require_dist_cjs16 = __commonJS({
     exports2.ListObjectsOutput$ = ListObjectsOutput$;
     exports2.ListObjectsRequest$ = ListObjectsRequest$;
     exports2.ListObjectsV2$ = ListObjectsV2$;
-    exports2.ListObjectsV2Command = ListObjectsV2Command;
+    exports2.ListObjectsV2Command = ListObjectsV2Command2;
     exports2.ListObjectsV2Output$ = ListObjectsV2Output$;
     exports2.ListObjectsV2Request$ = ListObjectsV2Request$;
     exports2.ListParts$ = ListParts$;
@@ -50433,7 +50433,7 @@ function hashObject(body) {
     sha256Base64Url: sha256.toString("base64url")
   };
 }
-async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrlPrefix, prefix, contentType) {
+async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrlPrefix, assetPrefix, contentType) {
   const filePath = await resolveExportFile(exportRoot, metadataPath);
   const body = await (0, import_promises3.readFile)(filePath);
   const hashes = hashObject(body);
@@ -50447,7 +50447,7 @@ async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrl
     fileExtension = `.${normalizedExtension}`;
   }
   return {
-    key: `${prefix}/assets/${hashes.sha256Hex}`,
+    key: `${assetPrefix}/${hashes.sha256Hex}`,
     expoAssetKey,
     body,
     contentType,
@@ -50467,6 +50467,9 @@ async function prepareRelease(input2) {
   ].join("/");
   const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
+  const assetPrefix = `${prefix}/assets`;
+  const updateId = (0, import_node_crypto7.randomUUID)();
+  const releaseAssetPrefix = `${assetPrefix}/${updateId}`;
   const exportRoot = (0, import_node_path6.resolve)(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
   let parsedMetadata;
@@ -50491,8 +50494,8 @@ async function prepareRelease(input2) {
     exportRoot,
     platformMetadata.data.bundle,
     "",
-    `${publicObjectUrl}/assets`,
-    prefix,
+    `${publicObjectUrl}/assets/${updateId}`,
+    releaseAssetPrefix,
     "application/javascript"
   );
   const assets = [
@@ -50501,7 +50504,14 @@ async function prepareRelease(input2) {
       platformMetadata.data.assets.map((asset) => {
         const extension = asset.ext.replace(/^\./u, "").toLowerCase();
         const contentType = Object.hasOwn(MIME_TYPES, extension) ? MIME_TYPES[extension] : "application/octet-stream";
-        return prepareFile(exportRoot, asset.path, asset.ext, `${publicObjectUrl}/assets`, prefix, contentType);
+        return prepareFile(
+          exportRoot,
+          asset.path,
+          asset.ext,
+          `${publicObjectUrl}/assets/${updateId}`,
+          releaseAssetPrefix,
+          contentType
+        );
       })
     )
   ];
@@ -50513,7 +50523,6 @@ async function prepareRelease(input2) {
     }
     uniqueAssets.set(asset.key, asset);
   }
-  const updateId = (0, import_node_crypto7.randomUUID)();
   const createdAt = (/* @__PURE__ */ new Date()).toISOString();
   const manifest = {
     id: updateId,
@@ -50576,6 +50585,50 @@ expo-signature: ${signature}\r
 // action/src/publish.ts
 var ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
 var MANIFEST_CACHE_CONTROL = "private, no-store";
+function errorMessage(error52) {
+  return error52 instanceof Error ? error52.message : "unknown R2 error";
+}
+var RELEASE_FOLDER_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+async function cleanupOldReleaseAssets(client, bucket, assetPrefix, updateId) {
+  const listPrefix = `${assetPrefix}/`;
+  const retainedPrefix = `${listPrefix}${updateId}/`;
+  let continuationToken;
+  while (true) {
+    const response = await client.send(
+      new import_client_s3.ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: listPrefix,
+        MaxKeys: 1e3,
+        ...continuationToken ? { ContinuationToken: continuationToken } : {}
+      })
+    );
+    const staleKeys = (response.Contents ?? []).map((object2) => object2.Key).filter((key) => {
+      if (!key || !key.startsWith(listPrefix) || key.startsWith(retainedPrefix)) return false;
+      const relativeKey = key.slice(listPrefix.length);
+      const separator = relativeKey.indexOf("/");
+      return separator > 0 && RELEASE_FOLDER_NAME.test(relativeKey.slice(0, separator));
+    });
+    if (staleKeys.length > 0) {
+      const objects = staleKeys.map((Key) => ({ Key }));
+      const deleteResponse = await client.send(
+        new import_client_s3.DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objects, Quiet: true }
+        })
+      );
+      const errors = deleteResponse.Errors ?? [];
+      if (errors.length > 0) {
+        const details = errors.map(({ Key, Code, Message }) => [Key, Code, Message].filter(Boolean).join(":")).join(", ");
+        throw new Error(`R2 asset cleanup delete returned object errors${details ? `: ${details}` : ""}`);
+      }
+    }
+    if (!response.IsTruncated) return;
+    if (!response.NextContinuationToken) {
+      throw new Error("R2 asset cleanup listing was truncated without a continuation token");
+    }
+    continuationToken = response.NextContinuationToken;
+  }
+}
 async function publishRelease(input2, client) {
   const validatedInput = parseActionInputs(input2);
   const transport = client ?? new import_client_s3.S3Client({
@@ -50616,6 +50669,13 @@ async function publishRelease(input2, client) {
       CacheControl: MANIFEST_CACHE_CONTROL
     })
   );
+  try {
+    await cleanupOldReleaseAssets(transport, validatedInput.r2Bucket, `${release2.manifestKey.slice(0, -"/manifest.json".length)}/assets`, release2.updateId);
+  } catch (error52) {
+    throw new Error(
+      `R2 post-publish cleanup failed after manifest upload for update ${release2.updateId}; manifest is already published: ${errorMessage(error52)}`
+    );
+  }
   return { updateId: release2.updateId, manifestUrl: release2.manifestUrl };
 }
 
