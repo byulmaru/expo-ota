@@ -76,6 +76,96 @@ function parseManifestPart(body: Buffer, contentType: string): { headers: Record
   return { headers, body: body.subarray(headerEnd + 4, bodyEnd) };
 }
 
+interface StoredObject {
+  body: Buffer;
+  contentType: string;
+  cacheControl?: string;
+}
+
+function fakeR2(options: {
+  listPageSize?: number;
+  deleteError?: boolean;
+  manifestPutError?: Error;
+} = {}): {
+  client: S3Transport;
+  storage: Map<string, StoredObject>;
+  events: string[];
+} {
+  const storage = new Map<string, StoredObject>();
+  const events: string[] = [];
+  const listSnapshots = new Map<string, string[]>();
+  const client: S3Transport = {
+    async send(command) {
+      const input = command.input as {
+        Bucket?: unknown;
+        Key?: unknown;
+        Body?: unknown;
+        ChecksumSHA256?: unknown;
+        IfNoneMatch?: unknown;
+        ContentType?: unknown;
+        CacheControl?: unknown;
+        Prefix?: unknown;
+        ContinuationToken?: unknown;
+        MaxKeys?: unknown;
+        Delete?: { Objects?: Array<{ Key?: string }>; Quiet?: boolean };
+      };
+      const bucket = String(input.Bucket);
+      if (input.Body !== undefined) {
+        const key = String(input.Key);
+        const storageKey = `${bucket}:${key}`;
+        if (key.endsWith("/manifest.json") && options.manifestPutError) throw options.manifestPutError;
+        if (input.IfNoneMatch === "*" && storage.has(storageKey)) {
+          throw { name: "PreconditionFailed", $metadata: { httpStatusCode: 412 } };
+        }
+        const body = Buffer.isBuffer(input.Body) ? input.Body : Buffer.from(String(input.Body));
+        expect(input.ChecksumSHA256).toBe(createHash("sha256").update(body).digest("base64"));
+        storage.set(storageKey, {
+          body,
+          contentType: String(input.ContentType),
+          cacheControl: input.CacheControl as string | undefined,
+        });
+        events.push(`put:${bucket}:${key}`);
+        return {};
+      }
+      if (input.Prefix !== undefined) {
+        const prefix = String(input.Prefix);
+        const snapshotKey = `${bucket}:${prefix}`;
+        const cachedKeys = input.ContinuationToken === undefined ? undefined : listSnapshots.get(snapshotKey);
+        const keys = cachedKeys ?? [...storage.keys()]
+          .filter((storageKey) => storageKey.startsWith(`${bucket}:${prefix}`))
+          .map((storageKey) => storageKey.slice(bucket.length + 1))
+          .sort();
+        listSnapshots.set(snapshotKey, keys);
+        const offset = Number(input.ContinuationToken ?? 0);
+        const pageSize = Math.min(options.listPageSize ?? Number.POSITIVE_INFINITY, Number(input.MaxKeys) || Number.POSITIVE_INFINITY);
+        const page = keys.slice(offset, offset + pageSize);
+        const nextOffset = offset + page.length;
+        const truncated = nextOffset < keys.length;
+        events.push(`list:${bucket}:${prefix}:${offset}`);
+        if (!truncated) listSnapshots.delete(snapshotKey);
+        return {
+          Contents: page.map((Key) => ({ Key })),
+          IsTruncated: truncated,
+          ...(truncated ? { NextContinuationToken: String(nextOffset) } : {}),
+        };
+      }
+      if (input.Delete !== undefined) {
+        const keys = input.Delete.Objects?.map((object) => object.Key).filter(
+          (key): key is string => Boolean(key),
+        ) ?? [];
+        events.push(`delete:${bucket}:${keys.join(",")}`);
+        if (options.deleteError) {
+          return { Errors: [{ Key: keys[0], Code: "AccessDenied", Message: "delete denied" }] };
+        }
+        for (const key of keys) storage.delete(`${bucket}:${key}`);
+        return {};
+      }
+      throw new Error("unexpected non-PutObject command");
+    },
+  };
+  return { client, storage, events };
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -166,7 +256,7 @@ describe("Expo OTA publish action", () => {
     expect(manifest.launchAsset).toMatchObject({ contentType: "application/javascript" });
     const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
     expect((manifest.launchAsset as { url: string }).url).toBe(
-      `https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${launchHash}`,
+      `https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${release.updateId}/${launchHash}`,
     );
     expect((manifest.launchAsset as { url: string }).url).not.toContain("/v1/projects/");
     expect(release.assets).toHaveLength(2);
@@ -245,7 +335,9 @@ describe("Expo OTA publish action", () => {
       assets: Array<{ url: string }>;
     };
     const launchKey = release.assets[0]?.key;
-    expect(launchKey).toBe("releases/another native/ios/staging/fingerprint test/assets/" + release.assets[0]?.sha256Hex);
+    expect(launchKey).toBe(
+      `releases/another native/ios/staging/fingerprint test/assets/${release.updateId}/${release.assets[0]?.sha256Hex}`,
+    );
     expect(manifest.launchAsset.url).toBe(
       `https://expo-ota.byulmaru.co/${launchKey!.split("/").map(encodeURIComponent).join("/")}`,
     );
@@ -311,43 +403,86 @@ describe("Expo OTA publish action", () => {
     await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), client)).rejects.toBe(serviceError);
   });
 
+  it("removes only old release folders after manifest upload and preserves flat or other-tuple assets", async () => {
+    const fixtureData = await fixture();
+    const transport = fakeR2({ listPageSize: 1 });
+    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
+    const oldReleasePrefix = `${tuplePrefix}/assets/11111111-1111-4111-8111-111111111111`;
+    const legacyFlatKey = `${tuplePrefix}/assets/legacy-flat-hash`;
+    const otherTupleKey = "releases/kosmo-native/android/staging/fingerprint test/assets/old-release/shared-hash";
+    const storedAsset: StoredObject = {
+      body: Buffer.from("old"),
+      contentType: "application/octet-stream",
+      cacheControl: "public, max-age=31536000, immutable",
+    };
+    transport.storage.set(`expo-ota:${oldReleasePrefix}/bundle`, storedAsset);
+    transport.storage.set(`expo-ota:${oldReleasePrefix}/logo`, storedAsset);
+    transport.storage.set(`expo-ota:${legacyFlatKey}`, storedAsset);
+    transport.storage.set(`expo-ota:${otherTupleKey}`, storedAsset);
+
+    const result = await publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client);
+    const currentReleasePrefix = `expo-ota:${tuplePrefix}/assets/${result.updateId}/`;
+    const tupleAssets = [...transport.storage.keys()].filter((key) => key.startsWith(`expo-ota:${tuplePrefix}/assets/`));
+    const manifestPutIndex = transport.events.findIndex((event) => event === `put:expo-ota:${tuplePrefix}/manifest.json`);
+    const firstListIndex = transport.events.findIndex((event) => event.startsWith(`list:expo-ota:${tuplePrefix}/assets/:`));
+    const firstDeleteIndex = transport.events.findIndex((event) => event.startsWith("delete:expo-ota:"));
+
+    expect(tupleAssets).toHaveLength(3);
+    expect(tupleAssets.filter((key) => key.startsWith(currentReleasePrefix))).toHaveLength(2);
+    expect(transport.storage.has(`expo-ota:${oldReleasePrefix}/bundle`)).toBe(false);
+    expect(transport.storage.has(`expo-ota:${legacyFlatKey}`)).toBe(true);
+    expect(transport.storage.has(`expo-ota:${otherTupleKey}`)).toBe(true);
+    expect(transport.events.filter((event) => event.startsWith(`list:expo-ota:${tuplePrefix}/assets/:`))).toHaveLength(5);
+    expect(firstListIndex).toBeGreaterThan(manifestPutIndex);
+    expect(firstDeleteIndex).toBeGreaterThan(manifestPutIndex);
+    expect(transport.events.some((event) => event.includes(`${oldReleasePrefix}/bundle`))).toBe(true);
+  });
+
+  it("reports delete errors after publishing the new manifest", async () => {
+    const fixtureData = await fixture();
+    const transport = fakeR2({ deleteError: true });
+    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
+    const oldReleaseKey = `${tuplePrefix}/assets/22222222-2222-4222-8222-222222222222/bundle`;
+    transport.storage.set(`expo-ota:${oldReleaseKey}`, {
+      body: Buffer.from("old"),
+      contentType: "application/octet-stream",
+    });
+
+    await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client)).rejects.toThrow(
+      /R2 post-publish cleanup failed after manifest upload for update [0-9a-f-]+; manifest is already published: R2 asset cleanup delete returned object errors: .*AccessDenied.*delete denied/u,
+    );
+    expect(transport.storage.has(`expo-ota:${tuplePrefix}/manifest.json`)).toBe(true);
+  });
+
+  it("does not clean up when manifest upload fails", async () => {
+    const fixtureData = await fixture();
+    const transport = fakeR2({ manifestPutError: new Error("manifest put failed") });
+    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
+    const oldReleaseKey = `${tuplePrefix}/assets/33333333-3333-4333-8333-333333333333/bundle`;
+    transport.storage.set(`expo-ota:${oldReleaseKey}`, {
+      body: Buffer.from("old"),
+      contentType: "application/octet-stream",
+    });
+
+    await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client)).rejects.toThrow(
+      "manifest put failed",
+    );
+    expect(transport.events.some((event) => event.startsWith("list:") || event.startsWith("delete:"))).toBe(false);
+    expect(transport.storage.has(`expo-ota:${oldReleaseKey}`)).toBe(true);
+  });
+
   it("uploads immutable assets before replacing the fixed manifest with SHA-256 checksums", async () => {
     const fixtureData = await fixture();
-    const storage = new Map<string, {
-      body: Buffer;
-      contentType: string;
-      cacheControl?: string;
-    }>();
-    const events: string[] = [];
+    const transport = fakeR2();
+    const { storage, events } = transport;
     const manifestObjectKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
     const assetObjectPrefix = "releases/kosmo-native/ios/staging/fingerprint test/assets/";
-    const fakeClient: S3Transport = {
-      async send(command) {
-        const input = command.input;
-        const bucket = String(input.Bucket);
-        const key = String(input.Key);
-        const storageKey = `${bucket}:${key}`;
-        if (input.Body === undefined) throw new Error("unexpected non-PutObject command");
-        if (input.IfNoneMatch === "*" && storage.has(storageKey)) {
-          throw { name: "PreconditionFailed", $metadata: { httpStatusCode: 412 } };
-        }
-        const body = Buffer.isBuffer(input.Body) ? input.Body : Buffer.from(String(input.Body));
-        expect(input.ChecksumSHA256).toBe(createHash("sha256").update(body).digest("base64"));
-        storage.set(storageKey, {
-          body,
-          contentType: String(input.ContentType),
-          cacheControl: input.CacheControl as string | undefined,
-        });
-        events.push(`put:${bucket}:${key}`);
-        return {};
-      },
-    };
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey, {
       publicBaseUrl: "https://updates.example.test/",
       r2Bucket: "custom-releases",
       r2AccountId: "custom-account",
     });
-    const first = await publishRelease(actionInputs, fakeClient);
+    const first = await publishRelease(actionInputs, transport.client);
     expect(first.manifestUrl).toBe(
       "https://updates.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
     );
@@ -360,6 +495,14 @@ describe("Expo OTA publish action", () => {
     expect(storedManifestPart?.headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
     );
+    const firstManifestJson = firstManifest
+      ? JSON.parse(parseManifestPart(firstManifest.body, firstManifest.contentType).body.toString("utf8")) as {
+          id: string;
+          launchAsset: { url: string };
+        }
+      : undefined;
+    expect(firstManifestJson?.id).toBe(first.updateId);
+    expect(firstManifestJson?.launchAsset.url).toContain(`/assets/${first.updateId}/`);
     const firstAssetPuts = events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`));
     expect(firstAssetPuts).toHaveLength(2);
     const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`custom-releases:${assetObjectPrefix}`));
@@ -375,15 +518,25 @@ describe("Expo OTA publish action", () => {
     expect(firstManifestPut).toBeGreaterThan(lastAssetPut);
 
     events.length = 0;
-    const second = await publishRelease(actionInputs, fakeClient);
+    const second = await publishRelease(actionInputs, transport.client);
     expect(second.updateId).not.toBe(first.updateId);
-    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(0);
+    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(2);
     const secondManifest = storage.get(`custom-releases:${manifestObjectKey}`);
     expect(secondManifest).toBeDefined();
     expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
       /^sig="[^"]+", keyid="main", alg="rsa-v1_5-sha256"$/u,
     );
-    expect(events.every((event) => event.startsWith("put:custom-releases:"))).toBe(true);
-    expect(events).toHaveLength(1);
+    const secondManifestJson = JSON.parse(
+      parseManifestPart(secondManifest!.body, secondManifest!.contentType).body.toString("utf8"),
+    ) as { id: string; launchAsset: { url: string } };
+    expect(secondManifestJson.id).toBe(second.updateId);
+    expect(secondManifestJson.launchAsset.url).toContain(`/assets/${second.updateId}/`);
+    const secondAssetObjectPrefix = `${assetObjectPrefix}${second.updateId}/`;
+    const remainingAssets = [...storage.keys()].filter((key) => key.startsWith(`custom-releases:${assetObjectPrefix}`));
+    expect(remainingAssets).toHaveLength(2);
+    expect(remainingAssets.some((key) => key.startsWith(`custom-releases:${assetObjectPrefix}${first.updateId}/`))).toBe(
+      false,
+    );
+    expect(remainingAssets.some((key) => key.startsWith(`custom-releases:${secondAssetObjectPrefix}`))).toBe(true);
   });
 });
