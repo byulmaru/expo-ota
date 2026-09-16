@@ -2,6 +2,13 @@ name: Publish Expo OTA release
 
 on:
   workflow_call:
+    outputs:
+      update_id:
+        description: UUID of the published Expo OTA update
+        value: ${{ jobs.publish.outputs.update_id }}
+      manifest_url:
+        description: Public URL of the published Expo OTA manifest
+        value: ${{ jobs.publish.outputs.manifest_url }}
     inputs:
       artifact_name:
         description: Artifact containing the approved Expo export directory contents
@@ -36,6 +43,9 @@ jobs:
   publish:
     name: Publish Expo OTA release
     if: github.repository_owner_id == '29172280'
+    outputs:
+      update_id: ${{ steps.publish.outputs.update-id }}
+      manifest_url: ${{ steps.publish.outputs.manifest-url }}
     runs-on: ubuntu-24.04
     concurrency:
       cancel-in-progress: false
@@ -102,6 +112,7 @@ jobs:
           url: ${{ vars.VAULT_ADDR }}
 
       - name: Publish Expo OTA update
+        id: publish
         env:
           INPUT_CHANNEL: ${{ inputs.channel }}
           INPUT_EXPORT-DIR: .artifacts/expo-export
@@ -116,3 +127,31 @@ jobs:
           INPUT_RUNTIME-VERSION: ${{ inputs.runtime_version }}
           INPUT_SIGNING-PRIVATE-KEY: ${{ secrets.signing_private_key }}
         run: node .publisher/action/dist/index.cjs
+
+      - name: Write publish result summary
+        if: success()
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          MANIFEST_URL: ${{ steps.publish.outputs.manifest-url }}
+          PLATFORM: ${{ inputs.platform }}
+          PROJECT: ${{ inputs.project }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          UPDATE_ID: ${{ steps.publish.outputs.update-id }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${UPDATE_ID}" || -z "${MANIFEST_URL}" ]]; then
+            echo "::error::The publisher did not return update-id and manifest-url outputs."
+            exit 1
+          fi
+
+          {
+            echo "### Published Expo OTA release"
+            echo
+            echo "- Update ID: \`${UPDATE_ID}\`"
+            echo "- Manifest URL: \`${MANIFEST_URL}\`"
+            echo "- Project: \`${PROJECT}\`"
+            echo "- Platform: \`${PLATFORM}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            echo "- Runtime version: \`${RUNTIME_VERSION}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
