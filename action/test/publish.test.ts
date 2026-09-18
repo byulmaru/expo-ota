@@ -14,7 +14,7 @@ const EXPO_ASSET_KEY = "0123456789abcdef0123456789abcdef";
 function inputs(
   exportDir: string,
   privateKey: string,
-  overrides: Partial<Pick<ActionInputs, "channel" | "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
+  overrides: Partial<Pick<ActionInputs, "channel" | "platform" | "runtimeVersion" | "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
 ): ActionInputs {
   return parseActionInputs({
     exportDir,
@@ -49,6 +49,7 @@ async function fixture(): Promise<{ directory: string; privateKey: string; publi
       bundler: "metro",
       fileMetadata: {
         ios: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "png" }] },
+        android: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "png" }] },
       },
     }),
   );
@@ -82,18 +83,13 @@ interface StoredObject {
   cacheControl?: string;
 }
 
-function fakeR2(options: {
-  listPageSize?: number;
-  deleteError?: boolean;
-  manifestPutError?: Error;
-} = {}): {
+function fakeR2(options: { manifestPutError?: Error } = {}): {
   client: S3Transport;
   storage: Map<string, StoredObject>;
   events: string[];
 } {
   const storage = new Map<string, StoredObject>();
   const events: string[] = [];
-  const listSnapshots = new Map<string, string[]>();
   const client: S3Transport = {
     async send(command) {
       const input = command.input as {
@@ -104,10 +100,6 @@ function fakeR2(options: {
         IfNoneMatch?: unknown;
         ContentType?: unknown;
         CacheControl?: unknown;
-        Prefix?: unknown;
-        ContinuationToken?: unknown;
-        MaxKeys?: unknown;
-        Delete?: { Objects?: Array<{ Key?: string }>; Quiet?: boolean };
       };
       const bucket = String(input.Bucket);
       if (input.Body !== undefined) {
@@ -125,39 +117,6 @@ function fakeR2(options: {
           cacheControl: input.CacheControl as string | undefined,
         });
         events.push(`put:${bucket}:${key}`);
-        return {};
-      }
-      if (input.Prefix !== undefined) {
-        const prefix = String(input.Prefix);
-        const snapshotKey = `${bucket}:${prefix}`;
-        const cachedKeys = input.ContinuationToken === undefined ? undefined : listSnapshots.get(snapshotKey);
-        const keys = cachedKeys ?? [...storage.keys()]
-          .filter((storageKey) => storageKey.startsWith(`${bucket}:${prefix}`))
-          .map((storageKey) => storageKey.slice(bucket.length + 1))
-          .sort();
-        listSnapshots.set(snapshotKey, keys);
-        const offset = Number(input.ContinuationToken ?? 0);
-        const pageSize = Math.min(options.listPageSize ?? Number.POSITIVE_INFINITY, Number(input.MaxKeys) || Number.POSITIVE_INFINITY);
-        const page = keys.slice(offset, offset + pageSize);
-        const nextOffset = offset + page.length;
-        const truncated = nextOffset < keys.length;
-        events.push(`list:${bucket}:${prefix}:${offset}`);
-        if (!truncated) listSnapshots.delete(snapshotKey);
-        return {
-          Contents: page.map((Key) => ({ Key })),
-          IsTruncated: truncated,
-          ...(truncated ? { NextContinuationToken: String(nextOffset) } : {}),
-        };
-      }
-      if (input.Delete !== undefined) {
-        const keys = input.Delete.Objects?.map((object) => object.Key).filter(
-          (key): key is string => Boolean(key),
-        ) ?? [];
-        events.push(`delete:${bucket}:${keys.join(",")}`);
-        if (options.deleteError) {
-          return { Errors: [{ Key: keys[0], Code: "AccessDenied", Message: "delete denied" }] };
-        }
-        for (const key of keys) storage.delete(`${bucket}:${key}`);
         return {};
       }
       throw new Error("unexpected non-PutObject command");
@@ -203,7 +162,7 @@ describe("Expo OTA publish action", () => {
 
     expect(release.manifestUrl).toBe(`https://expo-ota.byulmaru.co/${publicObjectPath}/manifest.json`);
     expect(release.manifestKey).toBe(`${storageKeyPrefix}/manifest.json`);
-    expect(release.assets.every((asset) => asset.key.startsWith(`${storageKeyPrefix}/assets/`))).toBe(true);
+    expect(release.assets.every((asset) => asset.key.startsWith("releases/kosmo-native/assets/"))).toBe(true);
   });
 
   it.each([".", "..", "preview/123", "preview 123", "preview?123"] as const)(
@@ -246,7 +205,7 @@ describe("Expo OTA publish action", () => {
     })).toThrow('Input "r2-account-id" contains invalid characters');
   });
 
-  it("builds tuple-scoped manifest bytes and signs those exact bytes", async () => {
+  it("builds signed tuple manifests with project-scoped global asset URLs", async () => {
     const fixtureData = await fixture();
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
     const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
@@ -256,10 +215,11 @@ describe("Expo OTA publish action", () => {
     expect(manifest.launchAsset).toMatchObject({ contentType: "application/javascript" });
     const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
     expect((manifest.launchAsset as { url: string }).url).toBe(
-      `https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/assets/${release.updateId}/${launchHash}`,
+      `https://expo-ota.byulmaru.co/releases/kosmo-native/assets/launch/${launchHash}`,
     );
     expect((manifest.launchAsset as { url: string }).url).not.toContain("/v1/projects/");
     expect(release.assets).toHaveLength(2);
+    expect(release.assets[0]?.key).toBe(`releases/kosmo-native/assets/launch/${launchHash}`);
     expect(release.manifestUrl).toBe(
       "https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
     );
@@ -328,7 +288,7 @@ describe("Expo OTA publish action", () => {
     expect(release.manifestKey).toBe(
       "releases/another native/ios/staging/fingerprint test/manifest.json",
     );
-    expect(release.assets.every((asset) => asset.key.startsWith("releases/another native/"))).toBe(true);
+    expect(release.assets.every((asset) => asset.key.startsWith("releases/another native/assets/"))).toBe(true);
     const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
     const manifest = JSON.parse(manifestPart.body.toString("utf8")) as {
       launchAsset: { url: string };
@@ -336,12 +296,13 @@ describe("Expo OTA publish action", () => {
     };
     const launchKey = release.assets[0]?.key;
     expect(launchKey).toBe(
-      `releases/another native/ios/staging/fingerprint test/assets/${release.updateId}/${release.assets[0]?.sha256Hex}`,
+      `releases/another native/assets/launch/${release.assets[0]?.sha256Hex}`,
     );
     expect(manifest.launchAsset.url).toBe(
       `https://expo-ota.byulmaru.co/${launchKey!.split("/").map(encodeURIComponent).join("/")}`,
     );
     const assetKey = release.assets[1]?.key;
+    expect(assetKey).toBe(`releases/another native/assets/${release.assets[1]?.sha256Hex}.png`);
     expect(manifest.assets[0]?.url).toBe(
       `https://expo-ota.byulmaru.co/${assetKey!.split("/").map(encodeURIComponent).join("/")}`,
     );
@@ -386,6 +347,29 @@ describe("Expo OTA publish action", () => {
     expect(manifest.assets[0]?.contentType).toBe("application/octet-stream");
   });
 
+  it("uses a lowercase regular asset suffix in its key and URL", async () => {
+    const fixtureData = await fixture();
+    await writeFile(
+      join(fixtureData.directory, "metadata.json"),
+      JSON.stringify({
+        version: 0,
+        bundler: "metro",
+        fileMetadata: {
+          ios: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "PNG" }] },
+        },
+      }),
+    );
+    const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
+    const assetHash = createHash("sha256").update("asset bytes").digest("hex");
+    expect(release.assets[1]?.key).toBe(`releases/kosmo-native/assets/${assetHash}.png`);
+    const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
+    const manifest = JSON.parse(manifestPart.body.toString("utf8")) as {
+      assets: Array<{ fileExtension?: string; url: string }>;
+    };
+    expect(manifest.assets[0]?.fileExtension).toBe(".png");
+    expect(manifest.assets[0]?.url).toBe(`https://expo-ota.byulmaru.co/releases/kosmo-native/assets/${assetHash}.png`);
+  });
+
   it("rethrows non-precondition S3 asset upload errors unchanged", async () => {
     const fixtureData = await fixture();
     const serviceError = new S3ServiceException({
@@ -403,80 +387,29 @@ describe("Expo OTA publish action", () => {
     await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), client)).rejects.toBe(serviceError);
   });
 
-  it("removes only old release folders after manifest upload and preserves flat or other-tuple assets", async () => {
-    const fixtureData = await fixture();
-    const transport = fakeR2({ listPageSize: 1 });
-    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
-    const oldReleasePrefix = `${tuplePrefix}/assets/11111111-1111-4111-8111-111111111111`;
-    const legacyFlatKey = `${tuplePrefix}/assets/legacy-flat-hash`;
-    const otherTupleKey = "releases/kosmo-native/android/staging/fingerprint test/assets/old-release/shared-hash";
-    const storedAsset: StoredObject = {
-      body: Buffer.from("old"),
-      contentType: "application/octet-stream",
-      cacheControl: "public, max-age=31536000, immutable",
-    };
-    transport.storage.set(`expo-ota:${oldReleasePrefix}/bundle`, storedAsset);
-    transport.storage.set(`expo-ota:${oldReleasePrefix}/logo`, storedAsset);
-    transport.storage.set(`expo-ota:${legacyFlatKey}`, storedAsset);
-    transport.storage.set(`expo-ota:${otherTupleKey}`, storedAsset);
-
-    const result = await publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client);
-    const currentReleasePrefix = `expo-ota:${tuplePrefix}/assets/${result.updateId}/`;
-    const tupleAssets = [...transport.storage.keys()].filter((key) => key.startsWith(`expo-ota:${tuplePrefix}/assets/`));
-    const manifestPutIndex = transport.events.findIndex((event) => event === `put:expo-ota:${tuplePrefix}/manifest.json`);
-    const firstListIndex = transport.events.findIndex((event) => event.startsWith(`list:expo-ota:${tuplePrefix}/assets/:`));
-    const firstDeleteIndex = transport.events.findIndex((event) => event.startsWith("delete:expo-ota:"));
-
-    expect(tupleAssets).toHaveLength(3);
-    expect(tupleAssets.filter((key) => key.startsWith(currentReleasePrefix))).toHaveLength(2);
-    expect(transport.storage.has(`expo-ota:${oldReleasePrefix}/bundle`)).toBe(false);
-    expect(transport.storage.has(`expo-ota:${legacyFlatKey}`)).toBe(true);
-    expect(transport.storage.has(`expo-ota:${otherTupleKey}`)).toBe(true);
-    expect(transport.events.filter((event) => event.startsWith(`list:expo-ota:${tuplePrefix}/assets/:`))).toHaveLength(5);
-    expect(firstListIndex).toBeGreaterThan(manifestPutIndex);
-    expect(firstDeleteIndex).toBeGreaterThan(manifestPutIndex);
-    expect(transport.events.some((event) => event.includes(`${oldReleasePrefix}/bundle`))).toBe(true);
-  });
-
-  it("reports delete errors after publishing the new manifest", async () => {
-    const fixtureData = await fixture();
-    const transport = fakeR2({ deleteError: true });
-    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
-    const oldReleaseKey = `${tuplePrefix}/assets/22222222-2222-4222-8222-222222222222/bundle`;
-    transport.storage.set(`expo-ota:${oldReleaseKey}`, {
-      body: Buffer.from("old"),
-      contentType: "application/octet-stream",
-    });
-
-    await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client)).rejects.toThrow(
-      /R2 post-publish cleanup failed after manifest upload for update [0-9a-f-]+; manifest is already published: R2 asset cleanup delete returned object errors: .*AccessDenied.*delete denied/u,
-    );
-    expect(transport.storage.has(`expo-ota:${tuplePrefix}/manifest.json`)).toBe(true);
-  });
-
-  it("does not clean up when manifest upload fails", async () => {
+  it("uploads assets before propagating a manifest failure and preserves the prior manifest", async () => {
     const fixtureData = await fixture();
     const transport = fakeR2({ manifestPutError: new Error("manifest put failed") });
-    const tuplePrefix = "releases/kosmo-native/ios/staging/fingerprint test";
-    const oldReleaseKey = `${tuplePrefix}/assets/33333333-3333-4333-8333-333333333333/bundle`;
-    transport.storage.set(`expo-ota:${oldReleaseKey}`, {
-      body: Buffer.from("old"),
-      contentType: "application/octet-stream",
-    });
+    const manifestKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
+    const previousManifest: StoredObject = {
+      body: Buffer.from("previous manifest"),
+      contentType: "multipart/mixed; boundary=previous",
+    };
+    transport.storage.set(`expo-ota:${manifestKey}`, previousManifest);
 
     await expect(publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client)).rejects.toThrow(
       "manifest put failed",
     );
-    expect(transport.events.some((event) => event.startsWith("list:") || event.startsWith("delete:"))).toBe(false);
-    expect(transport.storage.has(`expo-ota:${oldReleaseKey}`)).toBe(true);
+    expect(transport.events.filter((event) => event.includes("/assets/"))).toHaveLength(2);
+    expect(transport.storage.get(`expo-ota:${manifestKey}`)).toBe(previousManifest);
   });
 
-  it("uploads immutable assets before replacing the fixed manifest with SHA-256 checksums", async () => {
+  it("uploads immutable project assets before each fixed manifest and reuses them across repeats and tuples", async () => {
     const fixtureData = await fixture();
     const transport = fakeR2();
     const { storage, events } = transport;
     const manifestObjectKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
-    const assetObjectPrefix = "releases/kosmo-native/ios/staging/fingerprint test/assets/";
+    const assetObjectPrefix = "releases/kosmo-native/assets/";
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey, {
       publicBaseUrl: "https://updates.example.test/",
       r2Bucket: "custom-releases",
@@ -499,10 +432,18 @@ describe("Expo OTA publish action", () => {
       ? JSON.parse(parseManifestPart(firstManifest.body, firstManifest.contentType).body.toString("utf8")) as {
           id: string;
           launchAsset: { url: string };
+          assets: Array<{ url: string }>;
         }
       : undefined;
     expect(firstManifestJson?.id).toBe(first.updateId);
-    expect(firstManifestJson?.launchAsset.url).toContain(`/assets/${first.updateId}/`);
+    const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
+    const assetHash = createHash("sha256").update("asset bytes").digest("hex");
+    expect(firstManifestJson?.launchAsset.url).toBe(
+      `https://updates.example.test/releases/kosmo-native/assets/launch/${launchHash}`,
+    );
+    expect(firstManifestJson?.assets[0]?.url).toBe(
+      `https://updates.example.test/releases/kosmo-native/assets/${assetHash}.png`,
+    );
     const firstAssetPuts = events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`));
     expect(firstAssetPuts).toHaveLength(2);
     const assetObjects = [...storage.entries()].filter(([key]) => key.startsWith(`custom-releases:${assetObjectPrefix}`));
@@ -520,7 +461,7 @@ describe("Expo OTA publish action", () => {
     events.length = 0;
     const second = await publishRelease(actionInputs, transport.client);
     expect(second.updateId).not.toBe(first.updateId);
-    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(2);
+    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(0);
     const secondManifest = storage.get(`custom-releases:${manifestObjectKey}`);
     expect(secondManifest).toBeDefined();
     expect(parseManifestPart(secondManifest!.body, secondManifest!.contentType).headers["expo-signature"]).toMatch(
@@ -528,15 +469,88 @@ describe("Expo OTA publish action", () => {
     );
     const secondManifestJson = JSON.parse(
       parseManifestPart(secondManifest!.body, secondManifest!.contentType).body.toString("utf8"),
-    ) as { id: string; launchAsset: { url: string } };
+    ) as { id: string; launchAsset: { url: string }; assets: Array<{ url: string }> };
     expect(secondManifestJson.id).toBe(second.updateId);
-    expect(secondManifestJson.launchAsset.url).toContain(`/assets/${second.updateId}/`);
-    const secondAssetObjectPrefix = `${assetObjectPrefix}${second.updateId}/`;
-    const remainingAssets = [...storage.keys()].filter((key) => key.startsWith(`custom-releases:${assetObjectPrefix}`));
-    expect(remainingAssets).toHaveLength(2);
-    expect(remainingAssets.some((key) => key.startsWith(`custom-releases:${assetObjectPrefix}${first.updateId}/`))).toBe(
-      false,
+    expect(secondManifestJson.launchAsset.url).toBe(firstManifestJson?.launchAsset.url);
+    expect(secondManifestJson.assets[0]?.url).toBe(firstManifestJson?.assets[0]?.url);
+
+    events.length = 0;
+    const otherTuple = await publishRelease(
+      inputs(fixtureData.directory, fixtureData.privateKey, {
+        platform: "android",
+        channel: "production",
+        runtimeVersion: "fingerprint other",
+        publicBaseUrl: "https://updates.example.test/",
+        r2Bucket: "custom-releases",
+        r2AccountId: "custom-account",
+      }),
+      transport.client,
     );
-    expect(remainingAssets.some((key) => key.startsWith(`custom-releases:${secondAssetObjectPrefix}`))).toBe(true);
+    expect(otherTuple.manifestUrl).toBe(
+      "https://updates.example.test/releases/kosmo-native/android/production/fingerprint%20other/manifest.json",
+    );
+    expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(0);
+    const otherManifest = storage.get(
+      "custom-releases:releases/kosmo-native/android/production/fingerprint other/manifest.json",
+    );
+    expect(otherManifest).toBeDefined();
+    const otherManifestJson = JSON.parse(
+      parseManifestPart(otherManifest!.body, otherManifest!.contentType).body.toString("utf8"),
+    ) as { launchAsset: { url: string }; assets: Array<{ url: string }> };
+    expect(otherManifestJson.launchAsset.url).toBe(firstManifestJson?.launchAsset.url);
+    expect(otherManifestJson.assets[0]?.url).toBe(firstManifestJson?.assets[0]?.url);
+    expect([...storage.keys()].filter((key) => key.startsWith(`custom-releases:${assetObjectPrefix}`))).toHaveLength(2);
+  });
+
+  it("separates identical bytes when their served media types differ", async () => {
+    const fixtureData = await fixture();
+    await writeFile(join(fixtureData.directory, "assets", EXPO_ASSET_KEY), "bundle bytes");
+    await writeFile(
+      join(fixtureData.directory, "metadata.json"),
+      JSON.stringify({
+        version: 0,
+        bundler: "metro",
+        fileMetadata: {
+          ios: { bundle: "bundle.hbc", assets: [{ path: `assets/${EXPO_ASSET_KEY}`, ext: "bundle" }] },
+        },
+      }),
+    );
+    const transport = fakeR2();
+    await publishRelease(inputs(fixtureData.directory, fixtureData.privateKey), transport.client);
+    const hash = createHash("sha256").update("bundle bytes").digest("hex");
+    const launchKey = `releases/kosmo-native/assets/launch/${hash}`;
+    const assetKey = `releases/kosmo-native/assets/${hash}.bundle`;
+
+    expect(launchKey).not.toBe(assetKey);
+    expect(transport.storage.has(`expo-ota:${launchKey}`)).toBe(true);
+    expect(transport.storage.has(`expo-ota:${assetKey}`)).toBe(true);
+    expect(transport.events.filter((event) => event.includes("/assets/"))).toHaveLength(2);
+    const manifest = transport.storage.get(`expo-ota:releases/kosmo-native/ios/staging/fingerprint test/manifest.json`);
+    expect(manifest).toBeDefined();
+    const manifestJson = JSON.parse(
+      parseManifestPart(manifest!.body, manifest!.contentType).body.toString("utf8"),
+    ) as { launchAsset: { url: string }; assets: Array<{ url: string }> };
+    expect(manifestJson.launchAsset.url).toBe(`https://expo-ota.byulmaru.co/${launchKey}`);
+    expect(manifestJson.assets[0]?.url).toBe(`https://expo-ota.byulmaru.co/${assetKey}`);
+  });
+
+  it("stores changed content under a new global hash and retains the previous object", async () => {
+    const fixtureData = await fixture();
+    const transport = fakeR2();
+    const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey);
+    const first = await publishRelease(actionInputs, transport.client);
+    const firstLaunchKey = `releases/kosmo-native/assets/launch/${createHash("sha256").update("bundle bytes").digest("hex")}`;
+
+    await writeFile(join(fixtureData.directory, "bundle.hbc"), "changed bundle bytes");
+    const eventsStart = transport.events.length;
+    const second = await publishRelease(actionInputs, transport.client);
+    const secondLaunchKey = `releases/kosmo-native/assets/launch/${createHash("sha256").update("changed bundle bytes").digest("hex")}`;
+
+    expect(second.updateId).not.toBe(first.updateId);
+    expect(secondLaunchKey).not.toBe(firstLaunchKey);
+    expect(transport.storage.has(`expo-ota:${firstLaunchKey}`)).toBe(true);
+    expect(transport.storage.has(`expo-ota:${secondLaunchKey}`)).toBe(true);
+    expect(transport.events.slice(eventsStart).filter((event) => event.includes("/assets/"))).toHaveLength(1);
+    expect([...transport.storage.keys()].filter((key) => key.startsWith("expo-ota:releases/kosmo-native/assets/"))).toHaveLength(3);
   });
 });

@@ -13,16 +13,18 @@ The workflow must receive an already-built, approved export from the calling rep
 ## Static object paths and response contract
 
 - `GET /releases/{project}/{platform}/{channel}/{runtime}/manifest.json`
-- `GET /releases/{project}/{platform}/{channel}/{runtime}/assets/{update-id}/{lowercase-sha256-hex}`
+- `GET /releases/{project}/assets/launch/{lowercase-sha256-hex}` for the launch bundle
+- `GET /releases/{project}/assets/{lowercase-sha256-hex}.{normalized-extension}` for regular assets
 
 The publisher writes these prospective static objects directly to R2. Serving them requires the configured public host. The route tuple maps directly to these keys:
 
 ```text
 releases/{project}/{platform}/{channel}/{runtime}/manifest.json
-releases/{project}/{platform}/{channel}/{runtime}/assets/{update-id}/{lowercase-sha256-hex}
+releases/{project}/assets/launch/{lowercase-sha256-hex}
+releases/{project}/assets/{lowercase-sha256-hex}.{normalized-extension}
 ```
 
-`project`, `platform`, `channel`, and `runtime` are fixed in each URL. The publisher validates `project` and `runtime` as single path segments, and URL path segments are percent-encoded while R2 keys retain their exact input values.
+`project`, `platform`, `channel`, and `runtime` identify the fixed manifest URL. Asset objects are scoped only to `project`; the same bytes with the same normalized regular extension or the launch role have one key and URL across every platform, channel, runtime version, and update ID in that project. The publisher validates `project` and `runtime` as single path segments, and URL path segments are percent-encoded while R2 keys retain their exact input values.
 
 The manifest object has a `multipart/mixed; boundary=...` content type. Its first part is the JSON manifest:
 
@@ -32,7 +34,7 @@ Content-Type: application/json
 expo-signature: sig="<base64>", keyid="main", alg="rsa-v1_5-sha256"
 ```
 
-The `expo-signature` value signs exactly the JSON bytes in that part. The signature is not duplicated in custom object metadata. Asset objects use release-scoped content-addressed keys (`update-id` plus the SHA-256 hash) and are served with `public, max-age=31536000, immutable`; the manifest uses `private, no-store`. Identical bytes are deduplicated within one release, but are uploaded under each release's own prefix so that old release folders can be removed without affecting another release. Legacy flat `assets/{sha256}` objects are outside the automatic cleanup scope and require manual cleanup.
+The `expo-signature` value signs exactly the JSON bytes in that part. The signature is not duplicated in custom object metadata. Asset objects use project-scoped content-addressed keys: launch bundles use the reserved role path `releases/{project}/assets/launch/{sha256}`, and regular assets use `releases/{project}/assets/{sha256}.{normalized-extension}`. They are served with `public, max-age=31536000, immutable`; the manifest uses `private, no-store`. Regular extensions are lowercased for object identity and URL construction. Identical bytes with the same normalized extension or launch role are deduplicated across every platform, channel, runtime version, and update ID within one project; this identity does not merge different media-type aliases. `If-None-Match: *` keeps an existing immutable object from being uploaded again. The publisher does not automatically list or delete assets.
 
 Publisher storage is uncompressed: manifest and asset objects must be written without `content-encoding` (an explicit `identity` value is accepted). Every `PutObject` includes the object's SHA-256 digest in the standard base64 `ChecksumSHA256` field so R2 validates the bytes during the write; the publisher does not read objects back after uploading.
 
@@ -47,15 +49,15 @@ It must preserve the manifest `Content-Type` and multipart bytes, avoid content 
 
 The static endpoint is fixed to one project, platform, channel, and runtime tuple and must be consumed by a host that supports the Expo `multipart/mixed` response structure. It does not perform dynamic request-header negotiation or per-request signing-key selection.
 
-## Publishing and retention contract
+## Publishing and asset retention contract
 
-Publisher CI owns the release proof: it validates the export, hashes every asset, signs the exact JSON bytes embedded in the multipart body, and uploads every object with a SHA-256 checksum that R2 validates during the write. After the checksum-protected asset uploads and manifest `PutObject` succeed, the publisher lists the exact tuple's `assets/` prefix and removes objects only from older UUID-named release folders. It retains the current `assets/{update-id}/` folder, ignores legacy flat assets, leaves other tuples untouched, and does not purge an external CDN cache. The publisher credential therefore needs the R2 list/delete permissions required for these release-folder objects.
+Publisher CI owns the release proof: it validates the export, hashes every asset, signs the exact JSON bytes embedded in the multipart body, and uploads every object with a SHA-256 checksum that R2 validates during the write. It uploads immutable project-scoped assets before replacing the fixed tuple manifest and does not purge an external CDN cache. The publisher needs only the R2 object-write permissions required for these uploads; it does not perform list/delete cleanup.
 
-The channel is part of the asset URL in this contract. It must be a non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. Publishing to a channel therefore requires the publisher to produce URLs and a signature that match the destination tuple; it must not claim that the same signed bytes can be copied across channel-scoped URLs without revalidation.
+The channel is part of the manifest URL in this contract. It must be a non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. Publishing to a channel therefore requires the publisher to produce a manifest and signature that match the destination tuple, while its asset references may reuse the same project-scoped global URLs.
 
-Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. The new release folder is retained while older UUID-named release folders for the tuple are removed by the publish cleanup; legacy flat objects remain for manual cleanup. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
+Rollback should republish known-good assets in a new multipart manifest with a new UUID and a strictly later `createdAt`, sign the exact JSON part bytes, and overwrite the fixed tuple object. The shared global asset objects remain available for any manifest that references them. Copying older bytes only changes what the static host serves; an older `createdAt` does not force clients that already applied a newer update to downgrade.
 
-Automatic latest-only retention is a storage and availability tradeoff: a client that already received an older manifest may still request its release-scoped assets after cleanup, and that fetch can fail. Keep a separate grace policy if clients need older manifests to remain usable. See the [Expo asset response contract](https://docs.expo.dev/technical-specs/expo-updates-1/#asset-response). Cleanup applies to R2 objects and does not retract a response already cached or downloaded by a client.
+Existing tuple-local release objects from the previous layout and legacy flat `assets/{sha256}` objects are outside publisher scope. After every desired tuple has been republished so its manifest references the new project-scoped URLs, they may be removed as a one-time external/manual migration. Changed, unreferenced global assets remain until separately approved external cleanup. See the [Expo asset response contract](https://docs.expo.dev/technical-specs/expo-updates-1/#asset-response).
 
 ## Reusable Vault publisher workflow
 
@@ -102,7 +104,7 @@ The publisher writes `update-id` (the UUID in the published manifest) and `manif
 
 The generated manifest deliberately uses `metadata: {}` and `extra: {}`. It does not populate `extra.expoClient`, so on a remote update `Constants.expoConfig` is `null` in SDK 56. Callers that depend on Expo config through `Constants.expoConfig` are outside this publisher's current compatibility contract; they must keep that configuration in the bundle or wait for an explicitly approved public-config artifact extension.
 
-The manifest URL uses the supplied `public-base-url` followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Every launch and asset URL uses the same supplied origin followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/assets/{update-id}/{sha256}` key. The publisher writes to the supplied `r2-bucket` and writes immutable assets with `public, max-age=31536000, immutable` plus the static multipart manifest with `private, no-store`.
+The manifest URL uses the supplied `public-base-url` followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Launch and regular asset URLs use the same supplied origin followed by their exact encoded `releases/{project}/assets/launch/{sha256}` or `releases/{project}/assets/{sha256}.{normalized-extension}` key. The publisher writes to the supplied `r2-bucket` and writes immutable assets with `public, max-age=31536000, immutable` plus the static multipart manifest with `private, no-store`.
 
 ### Export artifact contract
 
@@ -116,7 +118,7 @@ The artifact named by `artifact_name` must contain the root of an approved Expo 
     └── <asset files referenced by metadata.json>
 ```
 
-The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. Each Expo asset filename is an opaque Expo-provided `key` identifier and is preserved as the manifest asset `key`; it is separate from the lowercase hexadecimal SHA-256 content-addressed R2 key. The publisher computes SHA-256 for R2 checksums and signed manifest `hash` values, which use standard base64 and base64url encodings respectively. The launch asset uses its SHA-256 hexadecimal bundle key. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
+The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. Each Expo asset filename is an opaque Expo-provided `key` identifier and is preserved as the manifest asset `key`; it is separate from the lowercase hexadecimal SHA-256 R2 object key and its normalized extension or launch role. The publisher computes SHA-256 for R2 checksums and signed manifest `hash` values, which use standard base64 and base64url encodings respectively. The launch asset uses its SHA-256 hexadecimal bundle key in the manifest and the reserved `launch` object path. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
 
 Build and approval remain caller-owned. For example, the calling workflow can run `expo export --platform ios --output-dir .artifacts/expo-export` and upload that directory as an artifact in an earlier job, then the reusable workflow downloads it in the protected publish job before running the trusted bundle. The export must come from the same approved source and release metadata that the workflow records; the publisher does not rebuild or silently replace it.
 
