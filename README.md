@@ -24,7 +24,7 @@ releases/{project}/assets/launch/{lowercase-sha256-hex}
 releases/{project}/assets/{lowercase-sha256-hex}.{normalized-extension}
 ```
 
-`project`, `platform`, `channel`, and `runtime` identify the fixed manifest URL. Asset objects are scoped only to `project`; the same bytes with the same normalized regular extension or the launch role have one key and URL across every platform, channel, runtime version, and update ID in that project. The publisher validates `project` and `runtime` as single path segments, and URL path segments are percent-encoded while R2 keys retain their exact input values.
+`project`, `platform`, `channel`, and `runtime` identify the fixed manifest URL. Asset objects are scoped only to `project`; the same bytes with the same normalized regular extension or the launch role have one key and URL across every platform, channel, runtime version, and update ID in that project. The publisher validates `runtime` as a non-empty raw URL path segment containing only RFC 3986 unreserved characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, `~`) and rejects values ending with `.`, while URL path segments are percent-encoded and R2 keys retain their exact input values.
 
 The manifest object has a `multipart/mixed; boundary=...` content type. Its first part is the JSON manifest:
 
@@ -92,7 +92,7 @@ The artifact named by `artifact_name` must contain the export directory contents
 
 The reusable workflow is the supported publishing entrypoint. The caller should export the app at the approved commit, retain the complete export directory as the workflow artifact, apply any required GitHub environment approval, and serialize publishes for the same `(project, platform, channel, runtimeVersion)` tuple before calling the workflow. The workflow owner guard accepts only repositories with `repository_owner_id=29172280`; Vault remains the source of R2 credentials, while the caller owns retrieval and handoff of its signing secret.
 
-`platform` accepts `ios` or `android`; `channel` is a required non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. `project` is a required URL and R2 namespace such as `kosmo-native` and may contain only letters, numbers, dots, underscores, and hyphens. `keyid` is optional and defaults to `main`; it uses the same safe segment characters. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
+`platform` accepts `ios` or `android`; `channel` is a required non-empty safe path segment containing only letters, numbers, dots, underscores, or hyphens, except for `.` and `..`; `dev`, `prod`, `staging`, and `production` are example values. `runtime-version` is an opaque Expo compatibility identifier: it must use only RFC 3986 unreserved characters and must not end with `.`, but it has no required length or hash format. `project` is a required URL and R2 namespace such as `kosmo-native` and may contain only letters, numbers, dots, underscores, and hyphens. `keyid` is optional and defaults to `main`; it uses the same safe segment characters. The caller's concurrency key must include `project` along with `platform`, `channel`, and `runtime-version`.
 
 ### Inputs and outputs
 

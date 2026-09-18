@@ -13,10 +13,12 @@ const actionInputsSchema = z.object({
     (value) => value !== "." && value !== ".." && /^[A-Za-z0-9._-]+$/u.test(value),
     'Input "channel" must be one safe path segment',
   ),
-  runtimeVersion: z.string().min(1).refine(
-    (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
-    'Input "runtime-version" must be one non-empty path segment',
-  ),
+  runtimeVersion: z
+    .string()
+    .regex(/^[A-Za-z0-9._~-]+$/u, {
+      error: 'Input "runtime-version" must use only RFC 3986 unreserved characters',
+    })
+    .refine((value) => !value.endsWith("."), 'Input "runtime-version" must not end with "."'),
   publicBaseUrl: z
     .url({ protocol: /^https?$/u, error: 'Input "public-base-url" must be an absolute HTTP(S) URL' })
     .refine((value) => {

@@ -10,6 +10,8 @@ import { publishRelease, type S3Transport } from "../src/publish";
 
 const temporaryDirectories: string[] = [];
 const EXPO_ASSET_KEY = "0123456789abcdef0123456789abcdef";
+const RUNTIME_VERSION = "runtime-v1";
+const OTHER_RUNTIME_VERSION = "runtime-v2";
 
 function inputs(
   exportDir: string,
@@ -21,7 +23,7 @@ function inputs(
     project: "kosmo-native",
     platform: "ios",
     channel: "staging",
-    runtimeVersion: "fingerprint test",
+    runtimeVersion: RUNTIME_VERSION,
     publicBaseUrl: "https://expo-ota.byulmaru.co",
     r2Bucket: "expo-ota",
     r2AccountId: "676a2d8e52515abd22c0edda7364cf73",
@@ -157,8 +159,8 @@ describe("Expo OTA publish action", () => {
   it.each(["dev", "prod", "preview-123"] as const)("accepts %s and isolates tuple paths", async (channel) => {
     const fixtureData = await fixture();
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey, { channel }));
-    const publicObjectPath = `releases/kosmo-native/ios/${channel}/fingerprint%20test`;
-    const storageKeyPrefix = `releases/kosmo-native/ios/${channel}/fingerprint test`;
+    const publicObjectPath = `releases/kosmo-native/ios/${channel}/${RUNTIME_VERSION}`;
+    const storageKeyPrefix = `releases/kosmo-native/ios/${channel}/${RUNTIME_VERSION}`;
 
     expect(release.manifestUrl).toBe(`https://expo-ota.byulmaru.co/${publicObjectPath}/manifest.json`);
     expect(release.manifestKey).toBe(`${storageKeyPrefix}/manifest.json`);
@@ -174,13 +176,20 @@ describe("Expo OTA publish action", () => {
     },
   );
 
+  it.each(["", ".", "..", "runtime.", "runtime/1", "runtime 1", "runtime?1", "runtime#1", "runtime%1"] as const)(
+    "rejects runtime version %j unless it is a safe URL path segment",
+    (runtimeVersion) => {
+      expect(() => inputs("export", "private-key", { runtimeVersion })).toThrow();
+    },
+  );
+
   it("rejects unsafe service overrides before preparing a release", () => {
     expect(() => parseActionInputs({
       exportDir: "export",
       project: "kosmo-native",
       platform: "ios",
       channel: "staging",
-      runtimeVersion: "fingerprint test",
+      runtimeVersion: RUNTIME_VERSION,
       publicBaseUrl: "https://updates.example.test/?token=unsafe",
       r2Bucket: "custom-releases",
       r2AccountId: "custom/account",
@@ -194,7 +203,7 @@ describe("Expo OTA publish action", () => {
       project: "kosmo-native",
       platform: "ios",
       channel: "staging",
-      runtimeVersion: "fingerprint test",
+      runtimeVersion: RUNTIME_VERSION,
       publicBaseUrl: "https://updates.example.test",
       r2Bucket: "custom-releases",
       r2AccountId: "custom/account",
@@ -210,7 +219,7 @@ describe("Expo OTA publish action", () => {
     const release = await prepareRelease(inputs(fixtureData.directory, fixtureData.privateKey));
     const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
     const manifest = JSON.parse(manifestPart.body.toString("utf8")) as Record<string, unknown>;
-    expect(manifest.runtimeVersion).toBe("fingerprint test");
+    expect(manifest.runtimeVersion).toBe(RUNTIME_VERSION);
     expect(manifest.id).toBe(release.updateId);
     expect(manifest.launchAsset).toMatchObject({ contentType: "application/javascript" });
     const launchHash = createHash("sha256").update("bundle bytes").digest("hex");
@@ -221,7 +230,7 @@ describe("Expo OTA publish action", () => {
     expect(release.assets).toHaveLength(2);
     expect(release.assets[0]?.key).toBe(`releases/kosmo-native/assets/launch/${launchHash}`);
     expect(release.manifestUrl).toBe(
-      "https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
+      `https://expo-ota.byulmaru.co/releases/kosmo-native/ios/staging/${RUNTIME_VERSION}/manifest.json`,
     );
     expect(manifestPart.headers["content-disposition"]).toBe('form-data; name="manifest"');
     expect(manifestPart.headers["content-type"]).toBe("application/json");
@@ -283,10 +292,10 @@ describe("Expo OTA publish action", () => {
       project: "another native",
     });
     expect(release.manifestUrl).toBe(
-      "https://expo-ota.byulmaru.co/releases/another%20native/ios/staging/fingerprint%20test/manifest.json",
+      `https://expo-ota.byulmaru.co/releases/another%20native/ios/staging/${RUNTIME_VERSION}/manifest.json`,
     );
     expect(release.manifestKey).toBe(
-      "releases/another native/ios/staging/fingerprint test/manifest.json",
+      `releases/another native/ios/staging/${RUNTIME_VERSION}/manifest.json`,
     );
     expect(release.assets.every((asset) => asset.key.startsWith("releases/another native/assets/"))).toBe(true);
     const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
@@ -390,7 +399,7 @@ describe("Expo OTA publish action", () => {
   it("uploads assets before propagating a manifest failure and preserves the prior manifest", async () => {
     const fixtureData = await fixture();
     const transport = fakeR2({ manifestPutError: new Error("manifest put failed") });
-    const manifestKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
+    const manifestKey = `releases/kosmo-native/ios/staging/${RUNTIME_VERSION}/manifest.json`;
     const previousManifest: StoredObject = {
       body: Buffer.from("previous manifest"),
       contentType: "multipart/mixed; boundary=previous",
@@ -408,7 +417,7 @@ describe("Expo OTA publish action", () => {
     const fixtureData = await fixture();
     const transport = fakeR2();
     const { storage, events } = transport;
-    const manifestObjectKey = "releases/kosmo-native/ios/staging/fingerprint test/manifest.json";
+    const manifestObjectKey = `releases/kosmo-native/ios/staging/${RUNTIME_VERSION}/manifest.json`;
     const assetObjectPrefix = "releases/kosmo-native/assets/";
     const actionInputs = inputs(fixtureData.directory, fixtureData.privateKey, {
       publicBaseUrl: "https://updates.example.test/",
@@ -417,7 +426,7 @@ describe("Expo OTA publish action", () => {
     });
     const first = await publishRelease(actionInputs, transport.client);
     expect(first.manifestUrl).toBe(
-      "https://updates.example.test/releases/kosmo-native/ios/staging/fingerprint%20test/manifest.json",
+      `https://updates.example.test/releases/kosmo-native/ios/staging/${RUNTIME_VERSION}/manifest.json`,
     );
     const firstManifest = storage.get(`custom-releases:${manifestObjectKey}`);
     expect(firstManifest?.cacheControl).toBe("private, no-store");
@@ -479,7 +488,7 @@ describe("Expo OTA publish action", () => {
       inputs(fixtureData.directory, fixtureData.privateKey, {
         platform: "android",
         channel: "production",
-        runtimeVersion: "fingerprint other",
+        runtimeVersion: OTHER_RUNTIME_VERSION,
         publicBaseUrl: "https://updates.example.test/",
         r2Bucket: "custom-releases",
         r2AccountId: "custom-account",
@@ -487,11 +496,11 @@ describe("Expo OTA publish action", () => {
       transport.client,
     );
     expect(otherTuple.manifestUrl).toBe(
-      "https://updates.example.test/releases/kosmo-native/android/production/fingerprint%20other/manifest.json",
+      `https://updates.example.test/releases/kosmo-native/android/production/${OTHER_RUNTIME_VERSION}/manifest.json`,
     );
     expect(events.filter((event) => event.startsWith(`put:custom-releases:${assetObjectPrefix}`))).toHaveLength(0);
     const otherManifest = storage.get(
-      "custom-releases:releases/kosmo-native/android/production/fingerprint other/manifest.json",
+      `custom-releases:releases/kosmo-native/android/production/${OTHER_RUNTIME_VERSION}/manifest.json`,
     );
     expect(otherManifest).toBeDefined();
     const otherManifestJson = JSON.parse(
@@ -525,7 +534,7 @@ describe("Expo OTA publish action", () => {
     expect(transport.storage.has(`expo-ota:${launchKey}`)).toBe(true);
     expect(transport.storage.has(`expo-ota:${assetKey}`)).toBe(true);
     expect(transport.events.filter((event) => event.includes("/assets/"))).toHaveLength(2);
-    const manifest = transport.storage.get(`expo-ota:releases/kosmo-native/ios/staging/fingerprint test/manifest.json`);
+    const manifest = transport.storage.get(`expo-ota:releases/kosmo-native/ios/staging/${RUNTIME_VERSION}/manifest.json`);
     expect(manifest).toBeDefined();
     const manifestJson = JSON.parse(
       parseManifestPart(manifest!.body, manifest!.contentType).body.toString("utf8"),
