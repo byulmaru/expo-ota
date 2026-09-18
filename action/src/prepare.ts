@@ -119,20 +119,21 @@ async function prepareFile(
   const expoAssetKey = basename(metadataPath.replaceAll("\\", "/"));
   let fileExtension: string | undefined;
   if (metadataExtension) {
-    const normalizedExtension = metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension;
+    const normalizedExtension = (metadataExtension.startsWith(".") ? metadataExtension.slice(1) : metadataExtension).toLowerCase();
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalizedExtension)) {
       throw new Error("metadata.json contains an invalid asset extension");
     }
     fileExtension = `.${normalizedExtension}`;
   }
+  const objectSuffix = fileExtension ?? "";
   return {
-    key: `${assetPrefix}/${hashes.sha256Hex}`,
+    key: `${assetPrefix}/${hashes.sha256Hex}${objectSuffix}`,
     expoAssetKey,
     body,
     contentType,
     ...hashes,
     fileExtension,
-    url: `${assetUrlPrefix}/${hashes.sha256Hex}`,
+    url: `${assetUrlPrefix}/${hashes.sha256Hex}${objectSuffix}`,
   };
 }
 
@@ -147,9 +148,9 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
   ].join("/");
   const publicObjectUrl = `${validatedInput.publicBaseUrl}/${publicObjectPath}`;
   const prefix = `releases/${validatedInput.project}/${validatedInput.platform}/${validatedInput.channel}/${validatedInput.runtimeVersion}`;
-  const assetPrefix = `${prefix}/assets`;
+  const assetPrefix = `releases/${validatedInput.project}/assets`;
+  const publicAssetUrl = `${validatedInput.publicBaseUrl}/releases/${encodeURIComponent(validatedInput.project)}/assets`;
   const updateId = randomUUID();
-  const releaseAssetPrefix = `${assetPrefix}/${updateId}`;
   const exportRoot = resolve(validatedInput.exportDir);
   const metadataPath = await resolveExportFile(exportRoot, "metadata.json");
   let parsedMetadata: unknown;
@@ -179,8 +180,8 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     exportRoot,
     platformMetadata.data.bundle,
     "",
-    `${publicObjectUrl}/assets/${updateId}`,
-    releaseAssetPrefix,
+    `${publicAssetUrl}/launch`,
+    `${assetPrefix}/launch`,
     "application/javascript",
   );
   const assets = [
@@ -193,8 +194,8 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
           exportRoot,
           asset.path,
           asset.ext,
-          `${publicObjectUrl}/assets/${updateId}`,
-          releaseAssetPrefix,
+          publicAssetUrl,
+          assetPrefix,
           contentType,
         );
       }),
