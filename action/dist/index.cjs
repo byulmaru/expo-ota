@@ -50296,6 +50296,7 @@ config(en_default());
 // action/src/input.ts
 var actionInputsSchema = external_exports.object({
   exportDir: external_exports.string().min(1),
+  expoClientPath: external_exports.string().min(1).optional(),
   project: external_exports.string().min(1).refine(
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
     'Input "project" must be one non-empty path segment'
@@ -50340,6 +50341,7 @@ function parseActionInputs(value) {
 function readActionInputs() {
   return parseActionInputs({
     exportDir: input("export-dir"),
+    expoClientPath: input("expo-client-path", "") || void 0,
     project: input("project"),
     platform: input("platform"),
     channel: input("channel"),
@@ -50456,6 +50458,20 @@ async function prepareFile(exportRoot, metadataPath, metadataExtension, assetUrl
     url: `${assetUrlPrefix}/${hashes.sha256Hex}${objectSuffix}`
   };
 }
+async function readExpoClientConfig(exportRoot, expoClientPath) {
+  if (!expoClientPath) return void 0;
+  const configPath = await resolveExportFile(exportRoot, expoClientPath);
+  let parsedConfig;
+  try {
+    parsedConfig = JSON.parse(await (0, import_promises3.readFile)(configPath, "utf8"));
+  } catch {
+    throw new Error("expo-client-path must point to valid JSON");
+  }
+  if (parsedConfig === null || typeof parsedConfig !== "object" || Array.isArray(parsedConfig)) {
+    throw new Error("expo-client-path must point to a JSON object");
+  }
+  return parsedConfig;
+}
 async function prepareRelease(input2) {
   const validatedInput = parseActionInputs(input2);
   const publicObjectPath = [
@@ -50490,6 +50506,7 @@ async function prepareRelease(input2) {
     assets: external_exports.array(external_exports.object({ path: external_exports.string(), ext: external_exports.string() }))
   }).safeParse(metadata[validatedInput.platform]);
   if (!platformMetadata.success) throw new Error("metadata.json has no valid export for the selected platform");
+  const expoClientConfig = await readExpoClientConfig(exportRoot, validatedInput.expoClientPath);
   const launch = await prepareFile(
     exportRoot,
     platformMetadata.data.bundle,
@@ -50542,7 +50559,7 @@ async function prepareRelease(input2) {
       url: asset.url
     })),
     metadata: {},
-    extra: {}
+    extra: expoClientConfig === void 0 ? {} : { expoClient: expoClientConfig }
   };
   const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
   let privateKey;

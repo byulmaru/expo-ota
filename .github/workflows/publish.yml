@@ -30,6 +30,11 @@ on:
         description: Native runtime version served by this update
         required: true
         type: string
+      expo_client_path:
+        default: ""
+        description: Optional path within the export artifact to a public Expo config JSON object
+        required: false
+        type: string
       keyid:
         default: main
         description: Expo Updates signing key identifier
@@ -115,6 +120,7 @@ jobs:
         id: publish
         env:
           INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_EXPO-CLIENT-PATH: ${{ inputs.expo_client_path }}
           INPUT_EXPORT-DIR: .artifacts/expo-export
           INPUT_KEYID: ${{ inputs.keyid }}
           INPUT_PLATFORM: ${{ inputs.platform }}

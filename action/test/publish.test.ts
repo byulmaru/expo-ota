@@ -16,7 +16,7 @@ const OTHER_RUNTIME_VERSION = "runtime-v2";
 function inputs(
   exportDir: string,
   privateKey: string,
-  overrides: Partial<Pick<ActionInputs, "channel" | "platform" | "runtimeVersion" | "publicBaseUrl" | "r2Bucket" | "r2AccountId">> = {},
+  overrides: Partial<Pick<ActionInputs, "channel" | "platform" | "runtimeVersion" | "publicBaseUrl" | "r2Bucket" | "r2AccountId" | "expoClientPath">> = {},
 ): ActionInputs {
   return parseActionInputs({
     exportDir,
@@ -144,6 +144,8 @@ describe("Expo OTA publish action", () => {
     expect(explicit.publicBaseUrl).toBe("https://expo-ota.byulmaru.co");
     expect(explicit.r2Bucket).toBe("expo-ota");
     expect(explicit.r2AccountId).toBe("676a2d8e52515abd22c0edda7364cf73");
+    expect(explicit.expoClientPath).toBeUndefined();
+    expect(parseActionInputs({ ...explicit, expoClientPath: "expo-client.json" }).expoClientPath).toBe("expo-client.json");
 
     const custom = parseActionInputs({
       ...explicit,
@@ -250,6 +252,71 @@ describe("Expo OTA publish action", () => {
       createHash("sha256").update("asset bytes").digest("base64url"),
     );
     expect((manifest.assets as Array<{ key: string }>)[0]?.key).toBe(EXPO_ASSET_KEY);
+    expect(manifest.extra).toEqual({});
+  });
+
+  it("embeds an explicitly provided Expo client config in manifest extra", async () => {
+    const fixtureData = await fixture();
+    const expoClientConfig = {
+      name: "Kosmo",
+      scheme: "kosmo",
+      ios: { bundleIdentifier: "co.byulmaru.kosmo" },
+      android: { package: "co.byulmaru.kosmo" },
+    };
+    await writeFile(join(fixtureData.directory, "expo-client.json"), JSON.stringify(expoClientConfig));
+
+    const release = await prepareRelease(
+      inputs(fixtureData.directory, fixtureData.privateKey, { expoClientPath: "expo-client.json" }),
+    );
+    const manifestPart = parseManifestPart(release.manifestUploadBody, release.manifestContentType);
+    const manifest = JSON.parse(manifestPart.body.toString("utf8")) as { extra: unknown };
+    const encodedSignature = /^sig="([^"]+)"/u.exec(manifestPart.headers["expo-signature"] ?? "")?.[1];
+
+    expect(manifest.extra).toEqual({ expoClient: expoClientConfig });
+    expect(encodedSignature).toBeTruthy();
+    expect(verify("RSA-SHA256", manifestPart.body, fixtureData.publicKey, Buffer.from(encodedSignature!, "base64"))).toBe(true);
+  });
+
+  it.each([
+    ["invalid JSON", "{not-json}"],
+    ["JSON array", "[]"],
+  ] as const)("rejects an explicitly provided %s Expo client config before publishing", async (_name, contents) => {
+    const fixtureData = await fixture();
+    await writeFile(join(fixtureData.directory, "expo-client.json"), contents);
+    let writes = 0;
+    const client: S3Transport = {
+      async send(command) {
+        if (command.input.Body !== undefined) writes += 1;
+        return {};
+      },
+    };
+
+    await expect(
+      publishRelease(
+        inputs(fixtureData.directory, fixtureData.privateKey, { expoClientPath: "expo-client.json" }),
+        client,
+      ),
+    ).rejects.toThrow(/expo-client-path must point to/u);
+    expect(writes).toBe(0);
+  });
+
+  it("rejects a missing explicitly provided Expo client config before publishing", async () => {
+    const fixtureData = await fixture();
+    let writes = 0;
+    const client: S3Transport = {
+      async send(command) {
+        if (command.input.Body !== undefined) writes += 1;
+        return {};
+      },
+    };
+
+    await expect(
+      publishRelease(
+        inputs(fixtureData.directory, fixtureData.privateKey, { expoClientPath: "missing-expo-client.json" }),
+        client,
+      ),
+    ).rejects.toThrow("Export file not found: missing-expo-client.json");
+    expect(writes).toBe(0);
   });
 
   it.each([

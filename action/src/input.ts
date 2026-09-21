@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const actionInputsSchema = z.object({
   exportDir: z.string().min(1),
+  expoClientPath: z.string().min(1).optional(),
   project: z.string().min(1).refine(
     (value) => value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/u.test(value),
     'Input "project" must be one non-empty path segment',
@@ -57,6 +58,7 @@ export function parseActionInputs(value: unknown): ActionInputs {
 export function readActionInputs(): ActionInputs {
   return parseActionInputs({
     exportDir: input("export-dir"),
+    expoClientPath: input("expo-client-path", "") || undefined,
     project: input("project"),
     platform: input("platform"),
     channel: input("channel"),
