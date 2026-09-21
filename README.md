@@ -82,11 +82,12 @@ jobs:
       platform: ios
       channel: prod
       runtime_version: '1.0.0'
+      expo_client_path: expo-client.json
     secrets:
       signing_private_key: ${{ secrets.EXPO_OTA_SIGNING_PRIVATE_KEY }}
 ```
 
-The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. The caller remains responsible for producing that artifact from the approved source. The reusable workflow reads the shared R2 credentials from Vault on its runner at publish time and receives the caller's signing key through `secrets.signing_private_key`.
+The artifact named by `artifact_name` must contain the export directory contents with `metadata.json` at its root. If `expo_client_path` is provided, that path must also identify a public Expo config JSON object inside the artifact. The caller remains responsible for producing that artifact from the approved source. The reusable workflow reads the shared R2 credentials from Vault on its runner at publish time and receives the caller's signing key through `secrets.signing_private_key`.
 
 ## Publisher workflow inputs and outputs
 
@@ -96,13 +97,13 @@ The reusable workflow is the supported publishing entrypoint. The caller should 
 
 ### Inputs and outputs
 
-The workflow inputs are `artifact_name`, `project`, `platform`, `channel`, `runtime_version`, and `keyid`; `runtime_version` is required and `keyid` is optional. The required `signing_private_key` workflow secret is passed by the caller and maps to the publisher's signing input. The workflow maps `EXPO_OTA_PUBLIC_BASE_URL`, `EXPO_OTA_R2_BUCKET`, and `CLOUDFLARE_ACCOUNT_ID` into the publisher's required service inputs, while Vault supplies only the R2 access key ID and secret access key. The reusable workflow checks out and executes the tracked Node 24 publisher bundle directly. The R2 access key ID, secret access key, and signing key are publishing credentials; callers must never commit them. `keyid` is fixed when the manifest is published and is not combined with `runtime_version` for secret storage.
+The workflow inputs are `artifact_name`, `project`, `platform`, `channel`, `runtime_version`, `expo_client_path`, and `keyid`; `runtime_version` is required, `expo_client_path` is optional, and `keyid` is optional. `expo_client_path` is resolved relative to the export artifact root and defaults to omitted. The required `signing_private_key` workflow secret is passed by the caller and maps to the publisher's signing input. The workflow maps `EXPO_OTA_PUBLIC_BASE_URL`, `EXPO_OTA_R2_BUCKET`, and `CLOUDFLARE_ACCOUNT_ID` into the publisher's required service inputs, while Vault supplies only the R2 access key ID and secret access key. The reusable workflow checks out and executes the tracked Node 24 publisher bundle directly. The R2 access key ID, secret access key, and signing key are publishing credentials; callers must never commit them. `keyid` is fixed when the manifest is published and is not combined with `runtime_version` for secret storage.
 
 Each caller must bundle the public certificate matching the `keyid` used for its signing key. Certificate lifecycle and rotation remain caller-owned.
 
 The publisher writes `update-id` (the UUID in the published manifest) and `manifest-url` (the public URL for the fixed tuple manifest) for its run step. The reusable workflow exposes these as the caller-visible `update_id` and `manifest_url` outputs, and writes the same values with the project, platform, channel, and runtime version to the GitHub Actions job summary. A caller can consume them through `needs.<publish-job>.outputs.update_id` and `needs.<publish-job>.outputs.manifest_url` without requesting the manifest again. A successful run means the export was validated, its JSON manifest part was signed, assets were uploaded with SHA-256 checksums, and the fixed multipart manifest object was written; the publisher does not read objects back after uploading. It does not mean that a native binary was built, the static host is live, or a device has applied the update.
 
-The generated manifest deliberately uses `metadata: {}` and `extra: {}`. It does not populate `extra.expoClient`, so on a remote update `Constants.expoConfig` is `null` in SDK 56. Callers that depend on Expo config through `Constants.expoConfig` are outside this publisher's current compatibility contract; they must keep that configuration in the bundle or wait for an explicitly approved public-config artifact extension.
+The generated manifest deliberately uses `metadata: {}`. For backward compatibility, `extra` remains `{}` when `expo_client_path` is omitted. When that optional workflow input (or the equivalent Action input `expo-client-path`) is provided, the publisher validates the referenced file as a JSON object and copies its full contents to `extra.expoClient` before signing the manifest. This config is public release data, not a place for secrets; callers that depend on `Constants.expoConfig` should explicitly pass the approved public config file.
 
 The manifest URL uses the supplied `public-base-url` followed by the exact encoded `releases/{project}/{platform}/{channel}/{runtime}/manifest.json` key. Launch and regular asset URLs use the same supplied origin followed by their exact encoded `releases/{project}/assets/launch/{sha256}` or `releases/{project}/assets/{sha256}.{normalized-extension}` key. The publisher writes to the supplied `r2-bucket` and writes immutable assets with `public, max-age=31536000, immutable` plus the static multipart manifest with `private, no-store`.
 
@@ -114,11 +115,12 @@ The artifact named by `artifact_name` must contain the root of an approved Expo 
 .artifacts/expo-export/
 ├── metadata.json
 ├── <bundle path from metadata.json>
-└── assets/
-    └── <asset files referenced by metadata.json>
+├── assets/
+│   └── <asset files referenced by metadata.json>
+└── <optional file identified by expo_client_path>
 ```
 
-The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. Each Expo asset filename is an opaque Expo-provided `key` identifier and is preserved as the manifest asset `key`; it is separate from the lowercase hexadecimal SHA-256 R2 object key and its normalized extension or launch role. The publisher computes SHA-256 for R2 checksums and signed manifest `hash` values, which use standard base64 and base64url encodings respectively. The launch asset uses its SHA-256 hexadecimal bundle key in the manifest and the reserved `launch` object path. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
+The metadata inventory has `version: 0`, `bundler: "metro"`, and a platform entry under `fileMetadata` containing one `bundle` path and `assets` entries with `path` and `ext`. Paths must stay inside `.artifacts/expo-export`, resolve to regular files, and be present exactly as referenced. When `expo_client_path` is provided, it must point to a regular file inside the same root; the publisher rejects missing, malformed, or non-object JSON before any R2 write. Each Expo asset filename is an opaque Expo-provided `key` identifier and is preserved as the manifest asset `key`; it is separate from the lowercase hexadecimal SHA-256 R2 object key and its normalized extension or launch role. The publisher computes SHA-256 for R2 checksums and signed manifest `hash` values, which use standard base64 and base64url encodings respectively. The launch asset uses its SHA-256 hexadecimal bundle key in the manifest and the reserved `launch` object path. Do not pre-compress files; this publisher stores manifest and assets without `content-encoding`.
 
 Build and approval remain caller-owned. For example, the calling workflow can run `expo export --platform ios --output-dir .artifacts/expo-export` and upload that directory as an artifact in an earlier job, then the reusable workflow downloads it in the protected publish job before running the trusted bundle. The export must come from the same approved source and release metadata that the workflow records; the publisher does not rebuild or silently replace it.
 

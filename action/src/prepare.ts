@@ -137,6 +137,24 @@ async function prepareFile(
   };
 }
 
+async function readExpoClientConfig(
+  exportRoot: string,
+  expoClientPath: string | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!expoClientPath) return undefined;
+  const configPath = await resolveExportFile(exportRoot, expoClientPath);
+  let parsedConfig: unknown;
+  try {
+    parsedConfig = JSON.parse(await readFile(configPath, "utf8"));
+  } catch {
+    throw new Error("expo-client-path must point to valid JSON");
+  }
+  if (parsedConfig === null || typeof parsedConfig !== "object" || Array.isArray(parsedConfig)) {
+    throw new Error("expo-client-path must point to a JSON object");
+  }
+  return parsedConfig as Record<string, unknown>;
+}
+
 export async function prepareRelease(input: ActionInputs): Promise<PreparedRelease> {
   const validatedInput = parseActionInputs(input);
   const publicObjectPath = [
@@ -175,6 +193,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
     })
     .safeParse(metadata[validatedInput.platform]);
   if (!platformMetadata.success) throw new Error("metadata.json has no valid export for the selected platform");
+  const expoClientConfig = await readExpoClientConfig(exportRoot, validatedInput.expoClientPath);
 
   const launch = await prepareFile(
     exportRoot,
@@ -229,7 +248,7 @@ export async function prepareRelease(input: ActionInputs): Promise<PreparedRelea
       url: asset.url,
     })),
     metadata: {},
-    extra: {},
+    extra: expoClientConfig === undefined ? {} : { expoClient: expoClientConfig },
   };
   const manifestBody = Buffer.from(JSON.stringify(manifest), "utf8");
   let privateKey;
