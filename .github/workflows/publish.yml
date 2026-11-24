@@ -52,6 +52,8 @@ jobs:
       update_id: ${{ steps.publish.outputs.update-id }}
       manifest_url: ${{ steps.publish.outputs.manifest-url }}
     runs-on: ubuntu-24.04
+    env:
+      OPENBAO_ADDR: https://openbao.tail1fdd55.ts.net
     concurrency:
       cancel-in-progress: false
       group: expo-ota-${{ inputs.project }}-${{ inputs.platform }}-${{ inputs.channel }}-${{ inputs.runtime_version }}
@@ -81,7 +83,7 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: .artifacts/expo-export
 
-      - name: Connect to Tailscale for Vault
+      - name: Connect to Tailscale for OpenBao
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           audience: ${{ vars.TAILSCALE_AUDIENCE }}
@@ -102,19 +104,19 @@ jobs:
             exit 1
           fi
 
-      - name: Read R2 credentials from Vault
+      - name: Read R2 credentials from OpenBao
         id: vault
         uses: hashicorp/vault-action@892a26828f195e65540a40b4768ae4571f51ebfc # v4.0.0
         with:
           exportEnv: false
-          jwtGithubAudience: ${{ vars.VAULT_ADDR }}
+          jwtGithubAudience: ${{ env.OPENBAO_ADDR }}
           method: jwt
           path: github-actions
           role: expo-ota-publish
           secrets: |
             secret/data/expo-ota/r2 access_key_id | R2_ACCESS_KEY_ID ;
             secret/data/expo-ota/r2 secret_access_key | R2_SECRET_ACCESS_KEY
-          url: ${{ vars.VAULT_ADDR }}
+          url: ${{ env.OPENBAO_ADDR }}
 
       - name: Publish Expo OTA update
         id: publish
